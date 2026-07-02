@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIRTAG — Cross-Exchange Fund Tracing Terminal</title>
+<meta name="description" content="AIRTAG // Autonomous Inter-exchange Routing, Tagging & Attribution Graph. Real-time detection of funds moving through centralized and instant-swap exchanges.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%233987e5' stroke-width='8'/><circle cx='50' cy='50' r='12' fill='%233987e5'/></svg>">
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body data-mode="booting">
+
+<!-- ============ BOOT SEQUENCE ============ -->
+<div id="boot-overlay">
+  <div class="boot-inner">
+    <pre class="boot-logo">
+   ▄▄▄       ██▓ ██▀███  ▄▄▄█████▓ ▄▄▄        ▄████
+  ▒████▄    ▓██▒▓██ ▒ ██▒▓  ██▒ ▓▒▒████▄     ██▒ ▀█▒
+  ▒██  ▀█▄  ▒██▒▓██ ░▄█ ▒▒ ▓██░ ▒░▒██  ▀█▄  ▒██░▄▄▄░
+  ░██▄▄▄▄██ ░██░▒██▀▀█▄  ░ ▓██▓ ░ ░██▄▄▄▄██ ░▓█  ██▓
+   ▓█   ▓██▒░██░░██▓ ▒██▒  ▒██▒ ░  ▓█   ▓██▒░▒▓███▀▒
+   ▒▒   ▓▒█░░▓  ░ ▒▓ ░▒▓░  ▒ ░░    ▒▒   ▓▒█░ ░▒   ▒</pre>
+    <div class="boot-sub">AUTONOMOUS INTER-EXCHANGE ROUTING · TAGGING &amp; ATTRIBUTION GRAPH</div>
+    <div id="boot-log" class="boot-log"></div>
+  </div>
+</div>
+
+<!-- ============ TOP BAR ============ -->
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 100 100" width="26" height="26" aria-hidden="true">
+      <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" stroke-width="6" opacity="0.5"/>
+      <circle cx="50" cy="50" r="26" fill="none" stroke="currentColor" stroke-width="5" opacity="0.75"/>
+      <circle cx="50" cy="50" r="10" fill="currentColor"/>
+      <line x1="50" y1="0"  x2="50" y2="18" stroke="currentColor" stroke-width="6"/>
+      <line x1="50" y1="82" x2="50" y2="100" stroke="currentColor" stroke-width="6"/>
+      <line x1="0" y1="50"  x2="18" y2="50" stroke="currentColor" stroke-width="6"/>
+      <line x1="82" y1="50" x2="100" y2="50" stroke="currentColor" stroke-width="6"/>
+    </svg>
+    <div class="brand-text">
+      <span class="brand-name">AIRTAG</span>
+      <span class="brand-ver">v4.2.1-rc3 · build 7f3ac91</span>
+    </div>
+    <span class="env-badge">PROD</span>
+    <span class="env-badge dim">CLUSTER eu-west-2 · SHARD 04/16</span>
+  </div>
+
+  <div class="topbar-metrics">
+    <div class="tmetric"><span class="tm-label">BTC/USD</span><span class="tm-value" id="tm-price">——</span><span class="tm-delta" id="tm-price-delta"></span></div>
+    <div class="tmetric"><span class="tm-label">TIP HEIGHT</span><span class="tm-value" id="tm-height">——</span></div>
+    <div class="tmetric"><span class="tm-label">FEE (sat/vB)</span><span class="tm-value" id="tm-fee">——</span></div>
+    <div class="tmetric"><span class="tm-label">MEMPOOL</span><span class="tm-value" id="tm-mempool">——</span></div>
+    <div class="tmetric"><span class="tm-label">INGEST LAT</span><span class="tm-value" id="tm-latency">——</span></div>
+    <div class="tmetric wide">
+      <span class="tm-label">DATA PLANE</span>
+      <span class="tm-value"><span class="status-dot" id="link-dot"></span><span id="link-state">SYNCING</span></span>
+    </div>
+    <div class="tmetric"><span class="tm-label">UTC</span><span class="tm-value" id="tm-clock">--:--:--</span></div>
+  </div>
+</header>
+
+<!-- ============ STAT TILES ============ -->
+<section class="stat-row">
+  <div class="stat-tile">
+    <div class="st-label">NET CEX FLOW · 24H</div>
+    <div class="st-value" id="st-netflow">—</div>
+    <div class="st-foot" id="st-netflow-foot">aggregated across 14 tracked entities</div>
+  </div>
+  <div class="stat-tile">
+    <div class="st-label">EXCHANGE INFLOW · 24H</div>
+    <div class="st-value in" id="st-inflow">—</div>
+    <div class="st-foot">deposits → custodial clusters</div>
+  </div>
+  <div class="stat-tile">
+    <div class="st-label">EXCHANGE OUTFLOW · 24H</div>
+    <div class="st-value out" id="st-outflow">—</div>
+    <div class="st-foot">withdrawals ← custodial clusters</div>
+  </div>
+  <div class="stat-tile">
+    <div class="st-label">INSTANT-SWAP THROUGHPUT</div>
+    <div class="st-value" id="st-swap">—</div>
+    <div class="st-foot">ChangeNOW · SimpleSwap · FixedFloat · +5</div>
+  </div>
+  <div class="stat-tile">
+    <div class="st-label">ACTIVE ALERTS</div>
+    <div class="st-value alert" id="st-alerts">0</div>
+    <div class="st-foot" id="st-alerts-foot">threshold ≥ $1.0M or risk ≥ 85</div>
+  </div>
+</section>
+
+<!-- ============ MAIN GRID ============ -->
+<main class="grid">
+
+  <!-- NETFLOW CHART -->
+  <section class="panel" id="panel-netflow">
+    <header class="panel-head">
+      <h2>EXCHANGE NETFLOW <span class="ph-sub">hourly · rolling 24h · BTC-equivalent</span></h2>
+      <div class="panel-tools">
+        <span class="legend-item"><i class="swatch sw-in"></i>inflow</span>
+        <span class="legend-item"><i class="swatch sw-out"></i>outflow</span>
+        <span class="legend-item"><i class="swatch sw-net"></i>net</span>
+      </div>
+    </header>
+    <div class="chart-wrap"><canvas id="netflow-canvas"></canvas><div id="netflow-tip" class="chart-tip" hidden></div></div>
+  </section>
+
+  <!-- TRACE CONSOLE -->
+  <section class="panel" id="panel-trace">
+    <header class="panel-head">
+      <h2>TRACE CONSOLE <span class="ph-sub">forward taint · UTXO graph walk</span></h2>
+      <span class="ph-badge" id="trace-engine-badge">ENGINE: IDLE</span>
+    </header>
+    <div class="trace-controls">
+      <input id="trace-input" type="text" spellcheck="false" autocomplete="off"
+             placeholder="bitcoin txid or address — e.g. paste a txid to walk its output graph">
+      <select id="trace-depth" title="max hop depth">
+        <option value="2">DEPTH 2</option>
+        <option value="3" selected>DEPTH 3</option>
+        <option value="4">DEPTH 4</option>
+      </select>
+      <button id="trace-btn">TRACE</button>
+      <button id="trace-demo-btn" class="ghost" title="run a synthetic demonstration trace">DEMO</button>
+    </div>
+    <div class="trace-body">
+      <div class="chart-wrap trace-canvas-wrap"><canvas id="trace-canvas"></canvas></div>
+      <div class="trace-side">
+        <div class="trace-log" id="trace-log"><div class="tl-line dim">// engine idle — awaiting target</div></div>
+        <div class="trace-hits" id="trace-hits"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LIVE FEED -->
+  <section class="panel" id="panel-feed">
+    <header class="panel-head">
+      <h2>LIVE FLOW FEED <span class="ph-sub">chain-confirmed + heuristic intercepts</span></h2>
+      <div class="panel-tools">
+        <select id="feed-filter-entity"><option value="">ALL ENTITIES</option></select>
+        <select id="feed-filter-dir">
+          <option value="">ALL DIRECTIONS</option>
+          <option value="IN">INFLOW</option>
+          <option value="OUT">OUTFLOW</option>
+          <option value="SWAP">SWAP</option>
+        </select>
+        <select id="feed-filter-src">
+          <option value="">ALL SOURCES</option>
+          <option value="CHAIN">CHAIN-ATTESTED</option>
+          <option value="HEUR">HEURISTIC</option>
+        </select>
+        <input id="feed-min-usd" type="number" placeholder="min USD" min="0" step="10000">
+        <button id="feed-pause" class="ghost">PAUSE</button>
+      </div>
+    </header>
+    <div class="table-scroll">
+      <table class="feed-table">
+        <thead>
+          <tr>
+            <th>TIME (UTC)</th><th>TX / EVENT</th><th>ENTITY</th><th>DIR</th>
+            <th>ASSET</th><th class="num">AMOUNT</th><th class="num">USD</th>
+            <th>RISK</th><th>SRC</th>
+          </tr>
+        </thead>
+        <tbody id="feed-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- RIGHT COLUMN -->
+  <aside class="col-right">
+    <section class="panel" id="panel-exposure">
+      <header class="panel-head"><h2>ENTITY EXPOSURE <span class="ph-sub">24h · USD notional</span></h2></header>
+      <div id="exposure-bars" class="exposure-bars"></div>
+    </section>
+
+    <section class="panel" id="panel-alerts">
+      <header class="panel-head"><h2>ALERT STREAM <span class="ph-sub">rule engine R-7</span></h2>
+        <button id="alerts-ack" class="ghost small">ACK ALL</button>
+      </header>
+      <div id="alert-list" class="alert-list"><div class="empty-note">no active alerts — thresholds armed</div></div>
+    </section>
+
+    <section class="panel" id="panel-heuristics">
+      <header class="panel-head"><h2>HEURISTIC ENGINES <span class="ph-sub">attribution stack</span></h2></header>
+      <ul class="heur-list" id="heur-list"></ul>
+    </section>
+  </aside>
+
+  <!-- TOPOLOGY -->
+  <section class="panel wide" id="panel-topology">
+    <header class="panel-head">
+      <h2>FLOW TOPOLOGY <span class="ph-sub">live routing graph — unknown clusters → custodial / swap endpoints</span></h2>
+      <span class="ph-badge" id="topo-stats">0 edges · 0 in-flight</span>
+    </header>
+    <div class="chart-wrap topo-wrap"><canvas id="topology-canvas"></canvas></div>
+  </section>
+
+</main>
+
+<!-- ============ SYSTEM TICKER ============ -->
+<footer class="ticker"><div class="ticker-track" id="ticker-track"></div></footer>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/net.js"></script>
+<script src="assets/js/synth.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/topology.js"></script>
+<script src="assets/js/trace.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
