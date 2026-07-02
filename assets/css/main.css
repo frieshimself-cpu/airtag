@@ -116,7 +116,18 @@ body[data-mode="live"] #boot-overlay { opacity: 0; pointer-events: none; }
   background: var(--st-warning); box-shadow: 0 0 8px var(--st-warning);
 }
 .status-dot.live     { background: var(--st-good); box-shadow: 0 0 8px var(--st-good); animation: pulse 2s infinite; }
+.status-dot.poll     { background: var(--s-blue); box-shadow: 0 0 8px var(--s-blue); animation: pulse 2s infinite; }
 .status-dot.degraded { background: var(--st-serious); box-shadow: 0 0 8px var(--st-serious); }
+
+/* epoch progress micro-bar (topbar) */
+.tm-bar {
+  display: block; width: 92px; height: 5px; margin-top: 5px;
+  background: var(--surface-3); border-radius: 3px; overflow: hidden;
+}
+.tm-bar-fill {
+  display: block; height: 100%; width: 0;
+  background: var(--c-accent); border-radius: 3px; transition: width 1s ease;
+}
 
 /* ============ STAT TILES ============ */
 .stat-row {
@@ -279,9 +290,11 @@ button.small { padding: 3px 9px; font-size: 9px; }
 .chip.dir-in   { color: var(--c-inflow);  border-color: var(--c-inflow);  background: rgba(230,103,103,0.08); }
 .chip.dir-out  { color: var(--c-outflow); border-color: var(--c-outflow); background: rgba(25,158,112,0.08); }
 .chip.dir-swap { color: var(--c-swap);    border-color: var(--c-swap);    background: rgba(201,133,0,0.08); }
-.chip.src-chain   { color: var(--st-good); border-color: rgba(12,163,12,0.4); }
-.chip.src-mempool { color: var(--c-accent); border-color: rgba(57,135,229,0.4); }
-.chip.src-heur    { color: var(--ink-muted); border-color: var(--hairline); }
+.chip.src-ws   { color: var(--st-good); border-color: rgba(12,163,12,0.4); }
+.chip.src-rpc  { color: var(--c-accent); border-color: rgba(57,135,229,0.4); }
+.chip.src-heur { color: var(--ink-muted); border-color: var(--hairline); }
+.cp { color: var(--ink-2); }
+.bridge-flag { color: var(--st-serious); font-size: 10px; }
 .entity-tag { font-weight: 600; }
 .entity-tag .etype { color: var(--ink-muted); font-size: 9px; font-weight: 400; }
 
@@ -334,6 +347,15 @@ button.small { padding: 3px 9px; font-size: 9px; }
 .heur-state { font-size: 9px; letter-spacing: .08em; }
 .heur-state.on   { color: var(--st-good); }
 .heur-state.warm { color: var(--st-warning); }
+
+/* ============ THROUGHPUT ============ */
+.tps-wrap { height: 120px; min-height: 120px; }
+
+/* ============ DEPOSIT REGISTRY (D-01) ============ */
+.dep-list { padding: 8px 14px 12px; display: flex; flex-direction: column; gap: 5px; max-height: 170px; overflow-y: auto; }
+.dep-row { display: flex; align-items: baseline; gap: 8px; font-size: 10px; }
+.dep-ent { color: var(--c-outflow); font-weight: 600; }
+.dep-ev  { color: var(--ink-muted); margin-left: auto; font-variant-numeric: tabular-nums; }
 
 /* ============ TOPOLOGY ============ */
 .topo-wrap { height: 260px; }

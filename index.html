@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIRTAG — Cross-Exchange Fund Tracing Terminal</title>
-<meta name="description" content="AIRTAG // Autonomous Inter-exchange Routing, Tagging & Attribution Graph. Real-time detection of funds moving through centralized and instant-swap exchanges.">
+<title>AIRTAG — Solana Exchange-Flow Intelligence Terminal</title>
+<meta name="description" content="AIRTAG // Autonomous Inter-exchange Routing, Tagging & Attribution Graph. Real-time detection of funds moving through centralized and instant-swap exchanges on Solana.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%233987e5' stroke-width='8'/><circle cx='50' cy='50' r='12' fill='%233987e5'/></svg>">
 <link rel="stylesheet" href="assets/css/main.css">
 </head>
@@ -20,7 +20,7 @@
   ░██▄▄▄▄██ ░██░▒██▀▀█▄  ░ ▓██▓ ░ ░██▄▄▄▄██ ░▓█  ██▓
    ▓█   ▓██▒░██░░██▓ ▒██▒  ▒██▒ ░  ▓█   ▓██▒░▒▓███▀▒
    ▒▒   ▓▒█░░▓  ░ ▒▓ ░▒▓░  ▒ ░░    ▒▒   ▓▒█░ ░▒   ▒</pre>
-    <div class="boot-sub">AUTONOMOUS INTER-EXCHANGE ROUTING · TAGGING &amp; ATTRIBUTION GRAPH</div>
+    <div class="boot-sub">AUTONOMOUS INTER-EXCHANGE ROUTING · TAGGING &amp; ATTRIBUTION GRAPH — SOLANA MAINNET</div>
     <div id="boot-log" class="boot-log"></div>
   </div>
 </div>
@@ -39,18 +39,22 @@
     </svg>
     <div class="brand-text">
       <span class="brand-name">AIRTAG</span>
-      <span class="brand-ver">v4.2.1-rc3 · build 7f3ac91</span>
+      <span class="brand-ver">v5.0.0 · build 9c41e7d</span>
     </div>
     <span class="env-badge">PROD</span>
-    <span class="env-badge dim">CLUSTER eu-west-2 · SHARD 04/16</span>
+    <span class="env-badge dim">CLUSTER solana-mainnet · SHARD 04/16</span>
   </div>
 
   <div class="topbar-metrics">
-    <div class="tmetric"><span class="tm-label">BTC/USD</span><span class="tm-value" id="tm-price">——</span><span class="tm-delta" id="tm-price-delta"></span></div>
-    <div class="tmetric"><span class="tm-label">TIP HEIGHT</span><span class="tm-value" id="tm-height">——</span></div>
-    <div class="tmetric"><span class="tm-label">FEE (sat/vB)</span><span class="tm-value" id="tm-fee">——</span></div>
-    <div class="tmetric"><span class="tm-label">MEMPOOL</span><span class="tm-value" id="tm-mempool">——</span></div>
-    <div class="tmetric"><span class="tm-label">INGEST LAT</span><span class="tm-value" id="tm-latency">——</span></div>
+    <div class="tmetric"><span class="tm-label">SOL/USD</span><span class="tm-value" id="tm-price">——</span><span class="tm-delta" id="tm-price-delta"></span></div>
+    <div class="tmetric"><span class="tm-label">SLOT</span><span class="tm-value" id="tm-slot">——</span></div>
+    <div class="tmetric">
+      <span class="tm-label">EPOCH <span id="tm-epoch">—</span> · <span id="tm-epoch-pct">—</span></span>
+      <span class="tm-bar"><span class="tm-bar-fill" id="tm-epoch-bar"></span></span>
+    </div>
+    <div class="tmetric"><span class="tm-label">NETWORK TPS</span><span class="tm-value" id="tm-tps">——</span></div>
+    <div class="tmetric"><span class="tm-label">RPC LAT</span><span class="tm-value" id="tm-latency">——</span></div>
+    <div class="tmetric"><span class="tm-label">RPC CALLS</span><span class="tm-value" id="tm-calls">0</span></div>
     <div class="tmetric wide">
       <span class="tm-label">DATA PLANE</span>
       <span class="tm-value"><span class="status-dot" id="link-dot"></span><span id="link-state">SYNCING</span></span>
@@ -64,27 +68,27 @@
   <div class="stat-tile">
     <div class="st-label">NET CEX FLOW · 24H</div>
     <div class="st-value" id="st-netflow">—</div>
-    <div class="st-foot" id="st-netflow-foot">aggregated across 14 tracked entities</div>
+    <div class="st-foot" id="st-netflow-foot">aggregated across 12 chain-watched wallets</div>
   </div>
   <div class="stat-tile">
     <div class="st-label">EXCHANGE INFLOW · 24H</div>
     <div class="st-value in" id="st-inflow">—</div>
-    <div class="st-foot">deposits → custodial clusters</div>
+    <div class="st-foot">deposits → custodial wallets · SOL + USDC/USDT</div>
   </div>
   <div class="stat-tile">
     <div class="st-label">EXCHANGE OUTFLOW · 24H</div>
     <div class="st-value out" id="st-outflow">—</div>
-    <div class="st-foot">withdrawals ← custodial clusters</div>
+    <div class="st-foot">withdrawals ← custodial wallets</div>
   </div>
   <div class="stat-tile">
-    <div class="st-label">INSTANT-SWAP THROUGHPUT</div>
-    <div class="st-value" id="st-swap">—</div>
-    <div class="st-foot">ChangeNOW · SimpleSwap · FixedFloat · +5</div>
+    <div class="st-label">DEPOSIT ADDRS INFERRED</div>
+    <div class="st-value" id="st-deposits">0</div>
+    <div class="st-foot">D-01 forwarding heuristic · session</div>
   </div>
   <div class="stat-tile">
     <div class="st-label">ACTIVE ALERTS</div>
     <div class="st-value alert" id="st-alerts">0</div>
-    <div class="st-foot" id="st-alerts-foot">threshold ≥ $1.0M or risk ≥ 85</div>
+    <div class="st-foot">threshold ≥ $500K or risk ≥ 85</div>
   </div>
 </section>
 
@@ -94,7 +98,7 @@
   <!-- NETFLOW CHART -->
   <section class="panel" id="panel-netflow">
     <header class="panel-head">
-      <h2>EXCHANGE NETFLOW <span class="ph-sub">hourly · rolling 24h · BTC-equivalent</span></h2>
+      <h2>EXCHANGE NETFLOW <span class="ph-sub">hourly · rolling 24h · USD notional</span></h2>
       <div class="panel-tools">
         <span class="legend-item"><i class="swatch sw-in"></i>inflow</span>
         <span class="legend-item"><i class="swatch sw-out"></i>outflow</span>
@@ -107,12 +111,12 @@
   <!-- TRACE CONSOLE -->
   <section class="panel" id="panel-trace">
     <header class="panel-head">
-      <h2>TRACE CONSOLE <span class="ph-sub">forward taint · UTXO graph walk</span></h2>
+      <h2>TRACE CONSOLE <span class="ph-sub">temporal taint · account-graph walk</span></h2>
       <span class="ph-badge" id="trace-engine-badge">ENGINE: IDLE</span>
     </header>
     <div class="trace-controls">
       <input id="trace-input" type="text" spellcheck="false" autocomplete="off"
-             placeholder="bitcoin txid or address — e.g. paste a txid to walk its output graph">
+             placeholder="solana address or tx signature — follow funds to custodial endpoints">
       <select id="trace-depth" title="max hop depth">
         <option value="2">DEPTH 2</option>
         <option value="3" selected>DEPTH 3</option>
@@ -133,7 +137,7 @@
   <!-- LIVE FEED -->
   <section class="panel" id="panel-feed">
     <header class="panel-head">
-      <h2>LIVE FLOW FEED <span class="ph-sub">chain-confirmed + heuristic intercepts</span></h2>
+      <h2>LIVE FLOW FEED <span class="ph-sub">websocket push + rpc poll + heuristic intercepts</span></h2>
       <div class="panel-tools">
         <select id="feed-filter-entity"><option value="">ALL ENTITIES</option></select>
         <select id="feed-filter-dir">
@@ -155,9 +159,9 @@
       <table class="feed-table">
         <thead>
           <tr>
-            <th>TIME (UTC)</th><th>TX / EVENT</th><th>ENTITY</th><th>DIR</th>
+            <th>TIME (UTC)</th><th>SIGNATURE</th><th>ENTITY</th><th>DIR</th>
             <th>ASSET</th><th class="num">AMOUNT</th><th class="num">USD</th>
-            <th>RISK</th><th>SRC</th>
+            <th>COUNTERPARTY</th><th>RISK</th><th>SRC</th>
           </tr>
         </thead>
         <tbody id="feed-body"></tbody>
@@ -172,6 +176,14 @@
       <div id="exposure-bars" class="exposure-bars"></div>
     </section>
 
+    <section class="panel" id="panel-tps">
+      <header class="panel-head">
+        <h2>NETWORK THROUGHPUT <span class="ph-sub">live perf samples</span></h2>
+        <span class="ph-badge" id="tps-now">—</span>
+      </header>
+      <div class="chart-wrap tps-wrap"><canvas id="tps-canvas"></canvas><div id="tps-tip" class="chart-tip" hidden></div></div>
+    </section>
+
     <section class="panel" id="panel-alerts">
       <header class="panel-head"><h2>ALERT STREAM <span class="ph-sub">rule engine R-7</span></h2>
         <button id="alerts-ack" class="ghost small">ACK ALL</button>
@@ -180,8 +192,13 @@
     </section>
 
     <section class="panel" id="panel-heuristics">
-      <header class="panel-head"><h2>HEURISTIC ENGINES <span class="ph-sub">attribution stack</span></h2></header>
+      <header class="panel-head"><h2>DETECTION STACK <span class="ph-sub">live counters + models</span></h2></header>
       <ul class="heur-list" id="heur-list"></ul>
+    </section>
+
+    <section class="panel" id="panel-deposits">
+      <header class="panel-head"><h2>INFERRED DEPOSIT ADDRESSES <span class="ph-sub">D-01 registry</span></h2></header>
+      <div id="dep-list" class="dep-list"></div>
     </section>
   </aside>
 
@@ -200,8 +217,9 @@
 <footer class="ticker"><div class="ticker-track" id="ticker-track"></div></footer>
 
 <script src="assets/js/config.js"></script>
-<script src="assets/js/net.js"></script>
-<script src="assets/js/synth.js"></script>
+<script src="assets/js/rpc.js"></script>
+<script src="assets/js/decode.js"></script>
+<script src="assets/js/detect.js"></script>
 <script src="assets/js/charts.js"></script>
 <script src="assets/js/topology.js"></script>
 <script src="assets/js/trace.js"></script>
