@@ -62,6 +62,27 @@ python3 -m http.server 8080
 # → http://localhost:8080
 ```
 
+## Deploying to Vercel
+
+The repo ships a `vercel.json` (static output, hardened headers, a CSP scoped
+to the two upstream APIs, and cache rules for `assets/`). No framework, no
+build command, no environment variables.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ffrieshimself-cpu%2Fairtag)
+
+**One-off from the CLI:**
+
+```sh
+npx vercel          # preview deployment
+npx vercel --prod   # production deployment
+```
+
+**Continuous deployment:** import the repo at
+[vercel.com/new](https://vercel.com/new), accept the detected settings
+(Framework Preset: *Other*, no build command, output directory: root) — every
+push to the production branch then deploys automatically, and every other
+branch gets a preview URL.
+
 ## Layout
 
 - `index.html` — single-page shell
