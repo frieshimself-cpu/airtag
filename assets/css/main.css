@@ -131,8 +131,9 @@ body[data-mode="live"] #boot-overlay { opacity: 0; pointer-events: none; }
 
 /* ============ STAT TILES ============ */
 .stat-row {
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;
   padding: 14px 18px 0;
+  position: relative; z-index: 1;
 }
 .stat-tile {
   background: var(--surface-1);
@@ -155,23 +156,29 @@ body[data-mode="live"] #boot-overlay { opacity: 0; pointer-events: none; }
 /* ============ GRID / PANELS ============ */
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 348px;
   grid-template-areas:
-    "netflow trace   right"
-    "feed    feed    right"
-    "topo    topo    topo";
+    "netflow trace    right"
+    "feed    feed     right"
+    "scope   heatmap  right"
+    "topo    topo     topo";
   gap: 12px;
   padding: 14px 18px 6px;
+  position: relative;
+  z-index: 1;
 }
 #panel-netflow  { grid-area: netflow; }
 #panel-trace    { grid-area: trace; }
 #panel-feed     { grid-area: feed; }
+#panel-scope    { grid-area: scope; }
+#panel-heatmap  { grid-area: heatmap; }
 .col-right      { grid-area: right; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 #panel-topology { grid-area: topo; }
 
 @media (max-width: 1180px) {
-  .grid { grid-template-columns: 1fr; grid-template-areas: "netflow" "trace" "feed" "right" "topo"; }
+  .grid { grid-template-columns: 1fr; grid-template-areas: "netflow" "trace" "feed" "scope" "heatmap" "right" "topo"; }
   .stat-row { grid-template-columns: repeat(2, 1fr); }
+  .sys-strip { grid-template-columns: repeat(4, 1fr) !important; }
 }
 
 .panel {
@@ -373,6 +380,152 @@ button.small { padding: 3px 9px; font-size: 9px; }
 .ticker-track .t-hl { color: var(--c-accent); }
 .ticker-track .t-warn { color: var(--st-warning); }
 @keyframes ticker-scroll { 0% { transform: translateX(100vw); } 100% { transform: translateX(-100%); } }
+
+/* ============================================================
+   HUD / VEDANT visual layer
+   ============================================================ */
+
+/* animated background lattice */
+#bg-canvas {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  opacity: 0.9;
+}
+.topbar, .mission-bar, .sys-strip, .stat-row, .grid, .ticker { position: relative; z-index: 1; }
+
+/* slow vertical scan sweep across the whole viewport */
+.scan-sweep {
+  position: fixed; left: 0; right: 0; top: 0; height: 140px; z-index: 998;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(57,135,229,0.05), transparent);
+  animation: sweep-down 9s linear infinite;
+}
+@keyframes sweep-down { 0% { transform: translateY(-160px); } 100% { transform: translateY(100vh); } }
+
+/* HUD corner brackets on panels & tiles (overlay, non-interactive) */
+.hud { position: relative; }
+.hud::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 6px;
+  --b: 11px; --t: 1px; --c: rgba(57,135,229,0.45);
+  background:
+    linear-gradient(var(--c),var(--c)) 0 0/var(--b) var(--t) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 0/var(--t) var(--b) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 0/var(--b) var(--t) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 0/var(--t) var(--b) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 100%/var(--b) var(--t) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 100%/var(--t) var(--b) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 100%/var(--b) var(--t) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 100%/var(--t) var(--b) no-repeat;
+}
+/* mod index tag on panels */
+.panel.hud[data-mod] > .panel-head { padding-right: 62px; }
+.panel.hud[data-mod]::before {
+  content: attr(data-mod); position: absolute; top: 8px; right: 12px; z-index: 2;
+  font-size: 8px; letter-spacing: .14em; color: var(--ink-muted);
+  border: 1px solid var(--hairline); border-radius: 3px; padding: 1px 5px;
+  background: var(--surface-2);
+}
+
+/* ============ MISSION BAR ============ */
+.mission-bar {
+  display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--hairline);
+  background: linear-gradient(180deg, rgba(18,26,40,0.7), rgba(15,21,32,0.7));
+}
+.threat { display: flex; align-items: center; gap: 10px; }
+.threat-cap { color: var(--ink-muted); font-size: 9px; letter-spacing: .14em; }
+.threat-track { width: 200px; height: 8px; background: var(--surface-3); border-radius: 4px; overflow: hidden; box-shadow: inset 0 0 4px rgba(0,0,0,0.5); }
+.threat-fill { display: block; height: 100%; border-radius: 4px; transition: width .8s ease, background .5s; }
+.threat-fill.good { background: var(--st-good); }
+.threat-fill.warning { background: var(--st-warning); }
+.threat-fill.serious { background: var(--st-serious); }
+.threat-fill.critical { background: var(--st-critical); animation: pulse 1.4s infinite; }
+.threat-label { font-size: 10px; letter-spacing: .1em; font-weight: 600; min-width: 108px; }
+.threat-label.good { color: var(--st-good); }
+.threat-label.warning { color: var(--st-warning); }
+.threat-label.serious { color: var(--st-serious); }
+.threat-label.critical { color: var(--st-critical); }
+
+.mission-ca { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.mca-label { color: var(--c-swap); font-size: 9px; letter-spacing: .12em; font-weight: 600; }
+.mca-code {
+  font-size: 10px; color: var(--ink-2); background: var(--page);
+  border: 1px solid var(--hairline); border-radius: 4px; padding: 4px 8px;
+  max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mca-copy {
+  background: transparent; border: 1px solid var(--c-swap); color: var(--c-swap);
+  font-size: 9px; padding: 4px 9px; border-radius: 4px; letter-spacing: .1em;
+}
+.mca-copy:hover { background: rgba(201,133,0,0.12); filter: none; }
+
+/* ============ SYSTEMS STRIP ============ */
+.sys-strip {
+  display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px;
+  padding: 0 18px; margin-top: 10px;
+  background: transparent;
+}
+.sys-cell {
+  background: var(--surface-1); border: 1px solid var(--hairline);
+  padding: 7px 10px; display: flex; flex-direction: column; gap: 4px;
+}
+.sys-label { color: var(--ink-muted); font-size: 8px; letter-spacing: .12em; }
+.sys-value { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); }
+.sys-value.warn { color: var(--st-warning); }
+.sys-gauge { height: 3px; background: var(--surface-3); border-radius: 2px; overflow: hidden; }
+.sys-gauge-fill { display: block; height: 100%; width: 2%; background: var(--c-accent); border-radius: 2px; transition: width .8s ease; }
+.sys-spacer { height: 3px; }
+
+/* ============ SIGNAL SCOPE ============ */
+.scope-wrap { height: 300px; display: flex; align-items: center; justify-content: center; }
+#scope-canvas { width: 100%; height: 100%; }
+
+/* ============ ACTIVITY MATRIX ============ */
+.heatmap-wrap { position: relative; padding: 10px 12px 12px; overflow-x: auto; }
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 74px repeat(24, minmax(9px, 1fr));
+  gap: 2px; min-width: 420px;
+}
+.hm-corner { }
+.hm-col-label { font-size: 8px; color: var(--ink-muted); text-align: center; align-self: end; }
+.hm-row-label { font-size: 9px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px; align-self: center; }
+.hm-cell { aspect-ratio: 1 / 1; min-height: 12px; border-radius: 2px; transition: transform .1s; }
+.hm-cell:hover { transform: scale(1.35); outline: 1px solid var(--ink); z-index: 3; position: relative; }
+
+/* ============ $VEDANT TOKEN PANEL ============ */
+.panel.token { border-color: rgba(201,133,0,0.4); }
+.panel.token.token-live { border-color: rgba(12,163,12,0.5); box-shadow: 0 0 26px rgba(12,163,12,0.12); }
+.tok-state { font-size: 9px; letter-spacing: .08em; font-weight: 600; }
+.tok-state.pre  { color: var(--c-swap); }
+.tok-state.live { color: var(--st-good); animation: pulse 2s infinite; }
+.token-body { padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 9px; }
+.tok-ca-row { display: flex; align-items: center; gap: 6px; }
+.tok-ca {
+  flex: 1; font-size: 9.5px; color: var(--ink-2); background: var(--page);
+  border: 1px solid var(--hairline); border-radius: 4px; padding: 5px 7px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tok-price-row { display: flex; align-items: baseline; gap: 10px; }
+.tok-price { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tok-change { font-size: 12px; font-weight: 600; }
+.tok-change.up { color: var(--st-good); }
+.tok-change.down { color: var(--st-critical); }
+.tok-spark { width: 100%; height: 44px; display: block; }
+.tok-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tok-stat { display: flex; flex-direction: column; gap: 2px; }
+.ts-l { color: var(--ink-muted); font-size: 8px; letter-spacing: .1em; }
+.ts-v { font-size: 12px; font-variant-numeric: tabular-nums; }
+.tok-pressure-row { display: flex; flex-direction: column; gap: 4px; }
+.tok-pb { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--surface-3); }
+.tok-pb-buy { background: var(--st-good); height: 100%; transition: width .6s; }
+.tok-pb-sell { background: var(--st-critical); height: 100%; transition: width .6s; }
+.tok-pressure { color: var(--ink-muted); font-size: 9px; }
+.tok-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tok-pair { color: var(--ink-muted); font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tok-links { display: flex; gap: 8px; flex-shrink: 0; }
+.tok-links a { color: var(--c-accent); font-size: 9px; text-decoration: none; }
+.tok-links a:hover { text-decoration: underline; }
 
 /* scrollbars */
 ::-webkit-scrollbar { width: 8px; height: 8px; }

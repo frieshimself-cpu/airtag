@@ -3,24 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIRTAG — Solana Exchange-Flow Intelligence Terminal</title>
-<meta name="description" content="AIRTAG // Autonomous Inter-exchange Routing, Tagging & Attribution Graph. Real-time detection of funds moving through centralized and instant-swap exchanges on Solana.">
+<title>VEDANT — Solana Exchange-Flow Intelligence Terminal</title>
+<meta name="description" content="VEDANT // Verifiable Exchange-flow Detection, Attribution & Network Tracing. Real-time detection of funds moving through centralized and instant-swap exchanges on Solana.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%233987e5' stroke-width='8'/><circle cx='50' cy='50' r='12' fill='%233987e5'/></svg>">
 <link rel="stylesheet" href="assets/css/main.css">
 </head>
 <body data-mode="booting">
 
+<canvas id="bg-canvas" aria-hidden="true"></canvas>
+<div class="scan-sweep" aria-hidden="true"></div>
+
 <!-- ============ BOOT SEQUENCE ============ -->
 <div id="boot-overlay">
   <div class="boot-inner">
     <pre class="boot-logo">
-   ▄▄▄       ██▓ ██▀███  ▄▄▄█████▓ ▄▄▄        ▄████
-  ▒████▄    ▓██▒▓██ ▒ ██▒▓  ██▒ ▓▒▒████▄     ██▒ ▀█▒
-  ▒██  ▀█▄  ▒██▒▓██ ░▄█ ▒▒ ▓██░ ▒░▒██  ▀█▄  ▒██░▄▄▄░
-  ░██▄▄▄▄██ ░██░▒██▀▀█▄  ░ ▓██▓ ░ ░██▄▄▄▄██ ░▓█  ██▓
-   ▓█   ▓██▒░██░░██▓ ▒██▒  ▒██▒ ░  ▓█   ▓██▒░▒▓███▀▒
-   ▒▒   ▓▒█░░▓  ░ ▒▓ ░▒▓░  ▒ ░░    ▒▒   ▓▒█░ ░▒   ▒</pre>
-    <div class="boot-sub">AUTONOMOUS INTER-EXCHANGE ROUTING · TAGGING &amp; ATTRIBUTION GRAPH — SOLANA MAINNET</div>
+   ██▒   █▓ ▓█████ ▓█████▄  ▄▄▄       ███▄    █ ▄▄▄█████▓
+  ▓██░   █▒ ▓█   ▀ ▒██▀ ██▌▒████▄     ██ ▀█   █ ▓  ██▒ ▓▒
+   ▓██  █▒░ ▒███   ░██   █▌▒██  ▀█▄  ▓██  ▀█ ██▒▒ ▓██░ ▒░
+    ▒██ █░░ ▒▓█  ▄ ░▓█▄   ▌░██▄▄▄▄██ ▓██▒  ▐▌██▒░ ▓██▓ ░
+     ▒▀█░   ░▒████▒░▒████▓  ▓█   ▓██▒▒██░   ▓██░  ▒██▒ ░
+     ░ ▐░   ░░ ▒░ ░ ▒▒▓  ▒  ▒▒   ▓▒█░░ ▒░   ▒ ▒   ▒ ░░</pre>
+    <div class="boot-sub">VERIFIABLE EXCHANGE-FLOW DETECTION · ATTRIBUTION &amp; NETWORK TRACING — SOLANA MAINNET</div>
     <div id="boot-log" class="boot-log"></div>
   </div>
 </div>
@@ -38,8 +41,8 @@
       <line x1="82" y1="50" x2="100" y2="50" stroke="currentColor" stroke-width="6"/>
     </svg>
     <div class="brand-text">
-      <span class="brand-name">AIRTAG</span>
-      <span class="brand-ver">v5.0.0 · build 9c41e7d</span>
+      <span class="brand-name">VEDANT</span>
+      <span class="brand-ver">v6.1.0 · build e7d41c9</span>
     </div>
     <span class="env-badge">PROD</span>
     <span class="env-badge dim">CLUSTER solana-mainnet · SHARD 04/16</span>
@@ -63,29 +66,51 @@
   </div>
 </header>
 
+<!-- ============ MISSION BAR ============ -->
+<section class="mission-bar">
+  <div class="threat">
+    <span class="threat-cap">THREAT INDEX</span>
+    <div class="threat-track"><span class="threat-fill good" id="threat-fill" style="width:8%"></span></div>
+    <span class="threat-label good" id="threat-label">NOMINAL · 8</span>
+  </div>
+  <div class="mission-ca">
+    <span class="mca-label">$VEDANT CA</span>
+    <code class="mca-code" id="mca-code">5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump</code>
+    <button class="mca-copy" id="mca-copy" title="copy contract address">COPY</button>
+  </div>
+</section>
+
+<!-- ============ SYSTEMS STRIP ============ -->
+<section class="sys-strip" id="sys-strip" aria-label="live systems telemetry"></section>
+
 <!-- ============ STAT TILES ============ -->
 <section class="stat-row">
-  <div class="stat-tile">
+  <div class="stat-tile hud">
     <div class="st-label">NET CEX FLOW · 24H</div>
     <div class="st-value" id="st-netflow">—</div>
     <div class="st-foot" id="st-netflow-foot">aggregated across 12 chain-watched wallets</div>
   </div>
-  <div class="stat-tile">
+  <div class="stat-tile hud">
     <div class="st-label">EXCHANGE INFLOW · 24H</div>
     <div class="st-value in" id="st-inflow">—</div>
-    <div class="st-foot">deposits → custodial wallets · SOL + USDC/USDT</div>
+    <div class="st-foot">deposits → custodial · SOL + USDC/USDT</div>
   </div>
-  <div class="stat-tile">
+  <div class="stat-tile hud">
     <div class="st-label">EXCHANGE OUTFLOW · 24H</div>
     <div class="st-value out" id="st-outflow">—</div>
     <div class="st-foot">withdrawals ← custodial wallets</div>
   </div>
-  <div class="stat-tile">
+  <div class="stat-tile hud">
     <div class="st-label">DEPOSIT ADDRS INFERRED</div>
     <div class="st-value" id="st-deposits">0</div>
     <div class="st-foot">D-01 forwarding heuristic · session</div>
   </div>
-  <div class="stat-tile">
+  <div class="stat-tile hud">
+    <div class="st-label">BRIDGE-EXPOSED · D-04</div>
+    <div class="st-value" id="st-bridge">0</div>
+    <div class="st-foot">wormhole · debridge · allbridge</div>
+  </div>
+  <div class="stat-tile hud">
     <div class="st-label">ACTIVE ALERTS</div>
     <div class="st-value alert" id="st-alerts">0</div>
     <div class="st-foot">threshold ≥ $500K or risk ≥ 85</div>
@@ -96,7 +121,7 @@
 <main class="grid">
 
   <!-- NETFLOW CHART -->
-  <section class="panel" id="panel-netflow">
+  <section class="panel hud" id="panel-netflow" data-mod="MOD·02">
     <header class="panel-head">
       <h2>EXCHANGE NETFLOW <span class="ph-sub">hourly · rolling 24h · USD notional</span></h2>
       <div class="panel-tools">
@@ -109,7 +134,7 @@
   </section>
 
   <!-- TRACE CONSOLE -->
-  <section class="panel" id="panel-trace">
+  <section class="panel hud" id="panel-trace" data-mod="MOD·05">
     <header class="panel-head">
       <h2>TRACE CONSOLE <span class="ph-sub">temporal taint · account-graph walk</span></h2>
       <span class="ph-badge" id="trace-engine-badge">ENGINE: IDLE</span>
@@ -135,7 +160,7 @@
   </section>
 
   <!-- LIVE FEED -->
-  <section class="panel" id="panel-feed">
+  <section class="panel hud" id="panel-feed" data-mod="MOD·03">
     <header class="panel-head">
       <h2>LIVE FLOW FEED <span class="ph-sub">websocket push + rpc poll + heuristic intercepts</span></h2>
       <div class="panel-tools">
@@ -169,14 +194,66 @@
     </div>
   </section>
 
+  <!-- SIGNAL SCOPE -->
+  <section class="panel hud" id="panel-scope" data-mod="MOD·06">
+    <header class="panel-head">
+      <h2>SIGNAL-SCOPE <span class="ph-sub">polar risk projection · azimuth=entity · radius=notional</span></h2>
+      <span class="ph-badge" id="scope-badge">SWEEP ACTIVE</span>
+    </header>
+    <div class="chart-wrap scope-wrap"><canvas id="scope-canvas"></canvas></div>
+  </section>
+
+  <!-- HEATMAP -->
+  <section class="panel hud" id="panel-heatmap" data-mod="MOD·08">
+    <header class="panel-head">
+      <h2>ACTIVITY MATRIX <span class="ph-sub">entity × hour · USD notional intensity</span></h2>
+    </header>
+    <div class="heatmap-wrap"><div id="heatmap-grid" class="heatmap-grid"></div><div id="heatmap-tip" class="chart-tip" hidden></div></div>
+  </section>
+
   <!-- RIGHT COLUMN -->
   <aside class="col-right">
-    <section class="panel" id="panel-exposure">
+    <section class="panel hud token" id="panel-token" data-mod="MOD·00">
+      <header class="panel-head">
+        <h2>$VEDANT TOKEN <span class="ph-sub">live DEX telemetry</span></h2>
+        <span class="tok-state pre" id="tok-state">◍ INITIALIZING</span>
+      </header>
+      <div class="token-body">
+        <div class="tok-ca-row">
+          <code class="tok-ca" id="tok-ca-code">5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump</code>
+          <button class="mca-copy" id="tok-copy">COPY</button>
+        </div>
+        <div class="tok-price-row">
+          <span class="tok-price" id="tok-price">—</span>
+          <span class="tok-change" id="tok-change"></span>
+        </div>
+        <canvas id="tok-spark" class="tok-spark"></canvas>
+        <div class="tok-stats">
+          <div class="tok-stat"><span class="ts-l">MARKET CAP</span><span class="ts-v" id="tok-mcap">—</span></div>
+          <div class="tok-stat"><span class="ts-l">LIQUIDITY</span><span class="ts-v" id="tok-liq">—</span></div>
+          <div class="tok-stat"><span class="ts-l">VOLUME 24H</span><span class="ts-v" id="tok-vol">—</span></div>
+        </div>
+        <div class="tok-pressure-row">
+          <div class="tok-pb"><span class="tok-pb-buy" id="tok-pb-buy" style="width:50%"></span><span class="tok-pb-sell" id="tok-pb-sell" style="width:50%"></span></div>
+          <div class="tok-pressure" id="tok-pressure">—</div>
+        </div>
+        <div class="tok-foot">
+          <span class="tok-pair" id="tok-pair">binding DexScreener…</span>
+          <span class="tok-links">
+            <a href="https://pump.fun/coin/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump" target="_blank" rel="noopener">pump</a>
+            <a href="https://dexscreener.com/solana/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump" target="_blank" rel="noopener">dex</a>
+            <a href="https://solscan.io/token/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump" target="_blank" rel="noopener">solscan</a>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel hud" id="panel-exposure" data-mod="MOD·09">
       <header class="panel-head"><h2>ENTITY EXPOSURE <span class="ph-sub">24h · USD notional</span></h2></header>
       <div id="exposure-bars" class="exposure-bars"></div>
     </section>
 
-    <section class="panel" id="panel-tps">
+    <section class="panel hud" id="panel-tps" data-mod="MOD·10">
       <header class="panel-head">
         <h2>NETWORK THROUGHPUT <span class="ph-sub">live perf samples</span></h2>
         <span class="ph-badge" id="tps-now">—</span>
@@ -184,26 +261,26 @@
       <div class="chart-wrap tps-wrap"><canvas id="tps-canvas"></canvas><div id="tps-tip" class="chart-tip" hidden></div></div>
     </section>
 
-    <section class="panel" id="panel-alerts">
+    <section class="panel hud" id="panel-alerts" data-mod="MOD·11">
       <header class="panel-head"><h2>ALERT STREAM <span class="ph-sub">rule engine R-7</span></h2>
         <button id="alerts-ack" class="ghost small">ACK ALL</button>
       </header>
       <div id="alert-list" class="alert-list"><div class="empty-note">no active alerts — thresholds armed</div></div>
     </section>
 
-    <section class="panel" id="panel-heuristics">
+    <section class="panel hud" id="panel-heuristics" data-mod="MOD·12">
       <header class="panel-head"><h2>DETECTION STACK <span class="ph-sub">live counters + models</span></h2></header>
       <ul class="heur-list" id="heur-list"></ul>
     </section>
 
-    <section class="panel" id="panel-deposits">
+    <section class="panel hud" id="panel-deposits" data-mod="MOD·13">
       <header class="panel-head"><h2>INFERRED DEPOSIT ADDRESSES <span class="ph-sub">D-01 registry</span></h2></header>
       <div id="dep-list" class="dep-list"></div>
     </section>
   </aside>
 
   <!-- TOPOLOGY -->
-  <section class="panel wide" id="panel-topology">
+  <section class="panel hud wide" id="panel-topology" data-mod="MOD·07">
     <header class="panel-head">
       <h2>FLOW TOPOLOGY <span class="ph-sub">live routing graph — unknown clusters → custodial / swap endpoints</span></h2>
       <span class="ph-badge" id="topo-stats">0 edges · 0 in-flight</span>
@@ -221,7 +298,11 @@
 <script src="assets/js/decode.js"></script>
 <script src="assets/js/detect.js"></script>
 <script src="assets/js/charts.js"></script>
+<script src="assets/js/heatmap.js"></script>
+<script src="assets/js/scope.js"></script>
 <script src="assets/js/topology.js"></script>
+<script src="assets/js/token.js"></script>
+<script src="assets/js/fx.js"></script>
 <script src="assets/js/trace.js"></script>
 <script src="assets/js/app.js"></script>
 </body>

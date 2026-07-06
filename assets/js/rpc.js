@@ -41,6 +41,14 @@
     state: "SYNCING",            // SYNCING | WS-LIVE | RPC-POLL | REPLAY
     lastLatencyMs: null,
     callCount: 0,
+
+    /* live internals surfaced to the systems strip */
+    bucketLevel() { return Math.max(0, Math.min(1, bucket.tokens / C.RPC.BUCKET_CAPACITY)); },
+    wsSubCount() { return this._wsSubs.size; },
+    endpointLabel() {
+      try { return new URL(C.RPC.ENDPOINTS[this._epIdx].http).host.split(".")[0]; }
+      catch { return "—"; }
+    },
     _epIdx: 0,
     _cooldown: new Map(),        // endpoint idx → not-before timestamp
     _httpAlive: false,

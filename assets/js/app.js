@@ -1,8 +1,9 @@
 /* ============================================================
- * AIRTAG // app.js
+ * VEDANT // app.js
  * Orchestrator — Solana edition.
  * Boot, telemetry pollers, websocket wiring, wallet poll
- * rotation, unified feed, detection panels, alerting, ticker.
+ * rotation, unified feed, detection panels, alerting, scope,
+ * heatmap, systems strip, threat index, ticker.
  * ============================================================ */
 
 (function () {
@@ -51,9 +52,24 @@
     rotation: 0,
     wsQueue: [],                // pending {watched, sig} from logsSubscribe
     wsBusy: false,
+    clock: 0,                   // monotonic vector-clock proxy
+    addStamps: [],              // fresh-event timestamps (throughput)
   };
   const FALLBACK_SOL = 150;
   AIRTAG.appPrice = () => State.solPrice || FALLBACK_SOL;
+
+  /* live internals surfaced to the systems strip (fx.js) */
+  AIRTAG.Metrics = {
+    get queueDepth()      { return State.wsQueue.length; },
+    get eventCount()      { return State.events.length; },
+    get throughputPerMin() {
+      const cut = Date.now() - 60_000;
+      while (State.addStamps.length && State.addStamps[0] < cut) State.addStamps.shift();
+      return State.addStamps.length;
+    },
+    get detectorHits()    { const c = Detect.counters(); return c.deposits + c.bursts + c.round + c.bridge; },
+    get vclock()          { return State.clock; },
+  };
 
   const WATCH_BY_ADDR = new Map(C.WATCHLIST.map((w) => [w.addr, w]));
   const POLL_ORDER = [...C.WATCHLIST].sort((a, b) => a.priority - b.priority);
@@ -61,16 +77,18 @@
   /* ---------- boot sequence ---------- */
 
   const BOOT_LINES = [
-    ["mod", "airtag-core        ", "loading attribution graph shard 04/16 (solana-mainnet)"],
-    ["ok",  "airtag-core        ", "graph mounted — 38.4M clusters resident"],
+    ["mod", "vedant-core        ", "loading attribution graph shard 04/16 (solana-mainnet)"],
+    ["ok",  "vedant-core        ", "graph mounted — 38.4M clusters resident"],
     ["mod", "rpc-plane          ", "failover chain: publicnode → mainnet-beta · bucket 2.5 rps"],
     ["mod", "ws-lane            ", "slotSubscribe + logsSubscribe on priority-1 custodial wallets"],
     ["mod", "decoder            ", "SOL balance-delta + USDC/USDT token-delta lanes online"],
     ["mod", "detectors          ", "arming D-01 deposit-inference · D-02 burst · D-03 round · D-04 bridge"],
     ["warn","detectors          ", "H-17 cross-chain matcher in warm-up (model v9 @ 62%)"],
+    ["mod", "signal-scope       ", "polar projection kernel online · sweep synchronized"],
+    ["mod", "token-module       ", "binding $VEDANT CA 5wbmU2…1pump → DexScreener telemetry"],
     ["mod", "rules              ", "R-07 threshold engine armed ($500K / risk 85)"],
     ["mod", "sim-layer          ", "instant-swap intercept simulation online [SRC=HEUR]"],
-    ["ok",  "airtag             ", "all subsystems nominal — entering live mode"],
+    ["ok",  "vedant             ", "all subsystems nominal — entering live mode"],
   ];
 
   async function bootSequence() {
@@ -144,6 +162,7 @@
   function setSlot(slot) {
     if (slot <= lastSlotDom) return;
     lastSlotDom = slot;
+    State.clock++;
     document.getElementById("tm-slot").textContent = slot.toLocaleString("en-US");
   }
 
@@ -166,9 +185,12 @@
       const drop = State.events.splice(0, State.events.length - 700);
       drop.forEach((d) => State.seen.delete(d.sig + "|" + d.entity));
     }
+    State.clock++;
     if (fresh) {
+      State.addStamps.push(Date.now());
       checkAlerts(ev);
       if (AIRTAG.Topology.canvas) AIRTAG.Topology.emit(ev);
+      if (AIRTAG.Scope) AIRTAG.Scope.push(ev);
     }
     return true;
   }
@@ -308,11 +330,26 @@
     document.getElementById("st-inflow").textContent = "$" + AIRTAG.fmtUsd(inUsd);
     document.getElementById("st-outflow").textContent = "$" + AIRTAG.fmtUsd(outUsd);
     document.getElementById("st-deposits").textContent = Detect.DepositRegistry.count();
+    document.getElementById("st-bridge").textContent = Detect.counters().bridge;
 
     AIRTAG.Netflow.setData(day);
     AIRTAG.Exposure.render(byEntity);
+    if (AIRTAG.Heatmap) AIRTAG.Heatmap.render(State.events);
     renderFeed(markFresh);
     renderDepositRegistry();
+    updateThreat(day);
+  }
+
+  /* composite threat index over live signals */
+  function updateThreat(day) {
+    if (!AIRTAG.Fx) return;
+    const now = Date.now();
+    const recent = day.filter((e) => now - e.time < 15 * 60_000);
+    const avgRisk = recent.length ? recent.reduce((s, e) => s + (e.risk || 0), 0) / recent.length : 0;
+    const alertBoost = Math.min(28, State.alerts.length * 6);
+    const whale = recent.some((e) => (e.usd || 0) >= C.THRESHOLDS.WHALE_USD) ? 12 : 0;
+    const bridge = recent.some((e) => e.bridgeTouch) ? 8 : 0;
+    AIRTAG.Fx.Threat.set(avgRisk * 0.72 + alertBoost + whale + bridge);
   }
 
   /* ---------- alerts ---------- */
@@ -416,15 +453,26 @@
     document.getElementById("alerts-ack").addEventListener("click", () => {
       State.alerts = []; renderAlerts();
     });
+    const mca = document.getElementById("mca-copy");
+    if (mca) mca.addEventListener("click", () => {
+      const t = C.TOKEN.ca;
+      const done = () => { mca.textContent = "COPIED ✓"; setTimeout(() => (mca.textContent = "COPY"), 1400); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done).catch(() => {});
+      else done();
+    });
   }
 
   /* ---------- init ---------- */
 
   async function init() {
+    AIRTAG.Fx.init();
     AIRTAG.Netflow.init();
     AIRTAG.Throughput.init();
     AIRTAG.Exposure.init();
+    AIRTAG.Heatmap.init();
+    AIRTAG.Scope.init();
     AIRTAG.Topology.init();
+    AIRTAG.Token.init();
     AIRTAG.Trace.init();
     wireControls();
     renderDetectors();

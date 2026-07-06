@@ -1,10 +1,25 @@
-# AIRTAG
+# VEDANT
 
-**A**utonomous **I**nter-exchange **R**outing · **T**agging & **A**ttribution **G**raph — Solana edition
+**V**erifiable **E**xchange-flow **D**etection, **A**ttribution & **N**etwork **T**racing — Solana edition
 
-A dark-terminal web console for detecting and tracing funds moving through
+A dark-terminal HUD console for detecting and tracing funds moving through
 centralized exchanges (Binance, Coinbase, Bybit, OKX, KuCoin, Gate.io, MEXC,
 Crypto.com, Bitget, Kraken) and instant-swap services on Solana mainnet.
+
+## $VEDANT token
+
+The console carries a live token module bound to the project's contract
+address:
+
+```
+CA: 5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump   ($VEDANT · Solana)
+```
+
+The `MOD·00` panel polls DexScreener every 30 s. When a liquidity pool is
+indexed it renders live price, 24h change, market cap, liquidity, 24h volume,
+buy/sell pressure and a price trace; until then it shows an honest
+`PRE-LAUNCH · AWAITING LIQUIDITY POOL` state and keeps polling so it lights up
+automatically on bond. The CA is one-click copyable from the mission bar.
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
@@ -67,6 +82,16 @@ Every feed row carries a `SRC` tag:
   score applied to real and simulated events alike.
 - **Network telemetry** — SOL price (CoinGecko), epoch progress, live slot,
   and the throughput panel built from `getRecentPerformanceSamples`.
+- **Live systems strip** — the eight HUD gauges are wired to real runtime
+  internals: the RPC token-bucket level, ingest-queue depth, active WebSocket
+  subscription count, event-store size, event throughput/min, cumulative
+  detector hits, active endpoint + latency, and a monotonic vector clock.
+- **Signal-scope** (`scope.js`) — a rotating polar projection of the live
+  event stream (azimuth = entity, radius = log-notional, hue = direction).
+- **Activity matrix** (`heatmap.js`) — entity × 24-hour USD-notional heatmap
+  on a validated single-hue sequential ramp.
+- **Threat index** — a composite of recent risk, active alerts, whale and
+  bridge presence, driving the mission-bar meter (NOMINAL → CRITICAL).
 
 The watchlist consists of publicly documented exchange wallets (labels from
 Solscan/SolanaFM and public incident reports); labels can go stale and are
@@ -104,19 +129,23 @@ npx vercel --prod   # production deployment
 ## Layout
 
 - `index.html` — single-page shell
-- `assets/css/main.css` — terminal theme (series palette CVD-validated against the dark surface)
-- `assets/js/config.js` — RPC topology, watchlist, entity registry, detector parameters
+- `assets/css/main.css` — HUD terminal theme (series palette CVD-validated against the dark surface)
+- `assets/js/config.js` — brand, token, RPC topology, watchlist, entity registry, detector parameters
 - `assets/js/rpc.js` — rate-limited JSON-RPC client + websocket lane
 - `assets/js/decode.js` — transaction → normalized flow event
 - `assets/js/detect.js` — detectors D-01…D-04, risk model, simulation layer
 - `assets/js/charts.js` — netflow + throughput canvases, exposure bars
+- `assets/js/heatmap.js` — entity × hour activity matrix
+- `assets/js/scope.js` — signal-scope polar projection
 - `assets/js/topology.js` — animated routing-graph canvas
+- `assets/js/token.js` — $VEDANT DexScreener token module
+- `assets/js/fx.js` — background lattice, live systems strip, threat meter
 - `assets/js/trace.js` — temporal taint-trace engine + graph renderer
-- `assets/js/app.js` — orchestrator (boot, pollers, ws wiring, feed, alerts)
+- `assets/js/app.js` — orchestrator (boot, pollers, ws wiring, feed, alerts, scope, threat)
 
 ## Disclaimer
 
-AIRTAG is a demonstration/visualization project. Wallet labels come from
+VEDANT is a demonstration/visualization project. Wallet labels come from
 public documentation and may go stale; `SRC=HEUR` rows are simulated; D-01
 attributions are heuristic inferences with disclosed evidence; nothing here
 is investigative-grade attribution or financial advice.

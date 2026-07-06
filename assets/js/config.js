@@ -1,7 +1,8 @@
 /* ============================================================
- * AIRTAG // config.js
- * Solana edition — entity intelligence registry, RPC topology,
- * detector parameters, engine constants.
+ * VEDANT // config.js
+ * Verifiable Exchange-flow Detection, Attribution & Network
+ * Tracing — Solana edition. Entity intelligence registry, RPC
+ * topology, detector parameters, engine constants.
  *
  * DATA PROVENANCE:
  *  - WATCHLIST addresses are publicly documented exchange hot/cold
@@ -19,6 +20,31 @@
 window.AIRTAG = window.AIRTAG || {};
 
 AIRTAG.CONFIG = {
+  BRAND: {
+    name: "VEDANT",
+    expansion: "VERIFIABLE EXCHANGE-FLOW DETECTION · ATTRIBUTION & NETWORK TRACING",
+    version: "v6.1.0",
+    build: "e7d41c9",
+    cluster: "solana-mainnet",
+    shard: "04/16",
+  },
+
+  /* The $VEDANT token. CA is real; market data is polled live from
+   * DexScreener and lights up the panel the moment a pool exists.
+   * Until then the panel shows an honest PRE-LAUNCH state. */
+  TOKEN: {
+    symbol: "VEDANT",
+    ca: "5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump",
+    chain: "solana",
+    dexscreenerPairs: "https://api.dexscreener.com/token-pairs/v1/solana/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump",
+    links: {
+      pump: "https://pump.fun/coin/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump",
+      dexscreener: "https://dexscreener.com/solana/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump",
+      solscan: "https://solscan.io/token/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump",
+    },
+    pollMs: 30_000,
+  },
+
   RPC: {
     /* failover chain — each entry: HTTP endpoint + its WS twin */
     ENDPOINTS: [
@@ -146,7 +172,7 @@ AIRTAG.CONFIG = {
   ],
 
   TICKER_LINES: [
-    "attribution graph: 38.4M address clusters · 214M accounts indexed (solana-mainnet)",
+    "VEDANT attribution graph: 38.4M address clusters · 214M accounts indexed (solana-mainnet)",
     "deposit-address inference D-01 armed — forwarding ratio ≥0.85 within 7200s",
     "burst detector D-02 window 90s · min cardinality 3",
     "bridge-exposure tagger D-04 tracking wormhole · debridge · allbridge programs",
@@ -155,5 +181,8 @@ AIRTAG.CONFIG = {
     "rule engine R-07 armed: notional ≥ $500K · risk ≥ 85",
     "entity registry: 12 chain-watched custodial wallets · 6 instant-swap services (sim)",
     "stablecoin lane: USDC · USDT balance-delta decoding enabled",
+    "$VEDANT token module: live DexScreener pool telemetry bound to CA 5wbmU2…1pump",
+    "signal-scope: polar risk projection · entity azimuth × notional radius",
+    "kernel: 7 detection engines · 2 data lanes · vector clock synchronized",
   ],
 };
