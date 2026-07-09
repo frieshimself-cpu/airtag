@@ -34,13 +34,13 @@ AIRTAG.CONFIG = {
    * Until then the panel shows an honest PRE-LAUNCH state. */
   TOKEN: {
     symbol: "VEDANT",
-    ca: "5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump",
+    ca: "FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump",
     chain: "solana",
-    dexscreenerPairs: "https://api.dexscreener.com/token-pairs/v1/solana/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump",
+    dexscreenerPairs: "https://api.dexscreener.com/token-pairs/v1/solana/FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump",
     links: {
-      pump: "https://pump.fun/coin/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump",
-      dexscreener: "https://dexscreener.com/solana/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump",
-      solscan: "https://solscan.io/token/5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump",
+      pump: "https://pump.fun/coin/FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump",
+      dexscreener: "https://dexscreener.com/solana/FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump",
+      solscan: "https://solscan.io/token/FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump",
     },
     pollMs: 30_000,
   },
@@ -181,7 +181,7 @@ AIRTAG.CONFIG = {
     "rule engine R-07 armed: notional ≥ $500K · risk ≥ 85",
     "entity registry: 12 chain-watched custodial wallets · 6 instant-swap services (sim)",
     "stablecoin lane: USDC · USDT balance-delta decoding enabled",
-    "$VEDANT token module: live DexScreener pool telemetry bound to CA 5wbmU2…1pump",
+    "$VEDANT token module: live DexScreener pool telemetry bound to CA FsTedV…cpump",
     "signal-scope: polar risk projection · entity azimuth × notional radius",
     "kernel: 7 detection engines · 2 data lanes · vector clock synchronized",
   ],

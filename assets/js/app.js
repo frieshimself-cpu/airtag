@@ -85,7 +85,7 @@
     ["mod", "detectors          ", "arming D-01 deposit-inference · D-02 burst · D-03 round · D-04 bridge"],
     ["warn","detectors          ", "H-17 cross-chain matcher in warm-up (model v9 @ 62%)"],
     ["mod", "signal-scope       ", "polar projection kernel online · sweep synchronized"],
-    ["mod", "token-module       ", "binding $VEDANT CA 5wbmU2…1pump → DexScreener telemetry"],
+    ["mod", "token-module       ", "binding $VEDANT CA FsTedV…cpump → DexScreener telemetry"],
     ["mod", "rules              ", "R-07 threshold engine armed ($500K / risk 85)"],
     ["mod", "sim-layer          ", "instant-swap intercept simulation online [SRC=HEUR]"],
     ["ok",  "vedant             ", "all subsystems nominal — entering live mode"],

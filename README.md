@@ -12,7 +12,7 @@ The console carries a live token module bound to the project's contract
 address:
 
 ```
-CA: 5wbmU2uHJmHojz71fiNcGuvxQxcqGkY64iX84qU1pump   ($VEDANT · Solana)
+CA: FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump   ($VEDANT · Solana)
 ```
 
 The `MOD·00` panel polls DexScreener every 30 s. When a liquidity pool is
