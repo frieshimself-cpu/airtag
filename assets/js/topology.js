@@ -39,7 +39,7 @@
         const fy = (i + 0.5) / n;
         return {
           id: e.name, label: e.name, kind: e.type,
-          x: this.w * (e.type === "SWAP" ? 0.86 : 0.68),
+          x: this.w * (e.type === "SWAP" ? 0.88 : e.type === "WHALE" ? 0.70 : 0.52),
           y: 18 + fy * (this.h - 36),
           r: 4 + Math.sqrt(e.weight) * 1.3,
           pulse: 0,
@@ -49,9 +49,9 @@
       for (let i = 0; i < 7; i++) {
         this.sources.push({
           id: "u" + i,
-          label: "cluster-" + (0x3f00 + ((Math.random() * 0xff) | 0)).toString(16),
+          label: "0x" + (0x3f00 + ((Math.random() * 0xff) | 0)).toString(16) + "…",
           kind: "UNKNOWN",
-          x: this.w * (0.06 + Math.random() * 0.16),
+          x: this.w * (0.05 + Math.random() * 0.12),
           y: 22 + ((i + 0.5) / 7) * (this.h - 44),
           r: 3.5 + Math.random() * 2.5,
           pulse: 0,
@@ -99,9 +99,10 @@
       ctx.font = "8.5px " + col("--mono");
       ctx.textAlign = "left";
       ctx.globalAlpha = 0.8;
-      ctx.fillText("UNATTRIBUTED CLUSTERS", this.w * 0.05, 12);
-      ctx.fillText("CUSTODIAL (CEX)", this.w * 0.62, 12);
-      ctx.fillText("INSTANT-SWAP", this.w * 0.82, 12);
+      ctx.fillText("UNATTRIBUTED ADDRESSES", this.w * 0.04, 12);
+      ctx.fillText("VENUES", this.w * 0.46, 12);
+      ctx.fillText("WHALES", this.w * 0.66, 12);
+      ctx.fillText("INSTANT-SWAP", this.w * 0.84, 12);
       ctx.globalAlpha = 1;
 
       /* dormant edges (faint) from each source to a few endpoints */
@@ -149,8 +150,9 @@
           nd.pulse = Math.max(0, nd.pulse - 0.02);
         }
         ctx.fillStyle =
-          nd.kind === "SWAP" ? col("--c-swap") :
-          nd.kind === "CEX"  ? col("--c-accent") :
+          nd.kind === "SWAP"  ? col("--c-swap") :
+          nd.kind === "WHALE" ? col("--c-net") :
+          nd.kind === "VENUE" ? col("--c-accent") :
           col("--ink-muted");
         ctx.beginPath(); ctx.arc(nd.x, nd.y, nd.r, 0, Math.PI * 2); ctx.fill();
         /* 2px surface ring so overlapping marks separate */

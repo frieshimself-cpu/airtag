@@ -1,152 +1,93 @@
 /* ============================================================
- * AIRTAG // decode.js
- * Solana transaction decoding — turns a jsonParsed getTransaction
- * payload into a normalized flow event relative to one watched
- * wallet:
+ * VEDANT // decode.js
+ * Robinhood Chain transaction normalization — turns a Blockscout
+ * v2 transaction object into a flow event:
  *
- *  - native SOL delta from meta.pre/postBalances at the wallet's
- *    account index (covers system transfers regardless of which
- *    program moved the lamports)
- *  - SPL stablecoin deltas from meta.pre/postTokenBalances for
- *    tracked mints (USDC / USDT), matched by token-account OWNER
- *  - counterparty = the non-program account with the largest
- *    opposite-sign delta in the same asset
- *  - bridge-touch flag when any invoked account is a known
- *    cross-chain bridge program (feeds detector D-04)
+ *  - direction relative to the watch registry (venues + whales):
+ *    to∈watch → IN (into venue/custody), from∈watch → OUT
+ *  - native ETH value (wei → ETH) with live USD conversion
+ *  - counterparty = the opposite side of the transfer
+ *  - bridge-touch flag when the tx involves the ArbSys exit
+ *    precompile or an L1→L2 deposit-style method (feeds D-04)
+ *  - zero-value ERC-20 interactions surface as method calls
  * ============================================================ */
 
 (function () {
   const C = AIRTAG.CONFIG;
+  const lower = (h) => (h || "").toLowerCase();
 
-  function keyList(tx) {
-    /* jsonParsed accountKeys: [{pubkey, signer, writable, source}] */
-    const msg = tx.transaction && tx.transaction.message;
-    return (msg && msg.accountKeys) || [];
-  }
-
-  function tokenDeltasFor(meta, owner) {
-    const out = {};
-    const scan = (arr, sign) => {
-      for (const b of arr || []) {
-        const mint = C.ASSETS.MINTS[b.mint];
-        if (!mint || b.owner !== owner) continue;
-        const amt = (b.uiTokenAmount && b.uiTokenAmount.uiAmount) || 0;
-        out[mint.sym] = (out[mint.sym] || 0) + sign * amt;
-      }
-    };
-    scan(meta.preTokenBalances, -1);
-    scan(meta.postTokenBalances, +1);
-    return out; // {USDC: +123.4, ...}
-  }
-
-  function counterpartySol(tx, keys, watchedIdx, wantSign) {
-    const meta = tx.meta;
-    let best = null, bestAbs = 0;
-    for (let i = 0; i < keys.length; i++) {
-      if (i === watchedIdx) continue;
-      const pk = keys[i].pubkey;
-      if (C.PROGRAM_IDS.has(pk) || C.BRIDGE_PROGRAMS.has(pk)) continue;
-      const d = (meta.postBalances[i] || 0) - (meta.preBalances[i] || 0);
-      if (Math.sign(d) !== wantSign) continue;
-      if (Math.abs(d) > bestAbs) { bestAbs = Math.abs(d); best = pk; }
-    }
-    return best;
-  }
-
-  function counterpartyToken(meta, watchedOwner, sym, wantSign) {
-    const byOwner = {};
-    const scan = (arr, sign) => {
-      for (const b of arr || []) {
-        const mint = C.ASSETS.MINTS[b.mint];
-        if (!mint || mint.sym !== sym || b.owner === watchedOwner) continue;
-        const amt = (b.uiTokenAmount && b.uiTokenAmount.uiAmount) || 0;
-        byOwner[b.owner] = (byOwner[b.owner] || 0) + sign * amt;
-      }
-    };
-    scan(meta.preTokenBalances, -1);
-    scan(meta.postTokenBalances, +1);
-    let best = null, bestAbs = 0;
-    for (const [owner, d] of Object.entries(byOwner)) {
-      if (Math.sign(d) !== wantSign) continue;
-      if (Math.abs(d) > bestAbs) { bestAbs = Math.abs(d); best = owner; }
-    }
-    return best;
-  }
+  const BRIDGE_METHODS = new Set([
+    "withdrawEth", "sendTxToL1", "outboundTransfer", "executeTransaction",
+    "finalizeInboundTransfer", "createRetryableTicket",
+  ]);
 
   const Decode = {
-    /* → normalized event or null (vote/no-op/failed txs). */
-    flowEvent(tx, watched) {
-      if (!tx || !tx.meta || tx.meta.err) return null;
-      const keys = keyList(tx);
-      const idx = keys.findIndex((k) => k.pubkey === watched.addr);
-      if (idx < 0) return null;
+    /* bsTx: Blockscout v2 tx object; watchMap: lowercased addr → watch entry.
+     * Returns a normalized event or null (dust / irrelevant). */
+    flowEvent(bsTx, watchMap) {
+      if (!bsTx || bsTx.status === "error") return null;
+      const fromH = lower(bsTx.from && bsTx.from.hash);
+      const toH = lower(bsTx.to && bsTx.to.hash);
+      const wFrom = watchMap.get(fromH) || null;
+      const wTo = watchMap.get(toH) || null;
 
-      const meta = tx.meta;
-      const lamportDelta = (meta.postBalances[idx] || 0) - (meta.preBalances[idx] || 0);
-      let solDelta = lamportDelta / 1e9;
-      /* the fee payer's delta includes the fee — don't misread a
-       * pure fee debit as an outflow */
-      if (idx === 0) solDelta += (meta.fee || 0) / 1e9;
-
-      const tokens = tokenDeltasFor(meta, watched.addr);
-      const bridgeTouch = keys.some((k) => C.BRIDGE_PROGRAMS.has(k.pubkey));
-
-      /* choose the dominant movement (SOL vs stablecoin) */
-      const legs = [];
-      if (Math.abs(solDelta) > 1e-6) legs.push({ asset: "SOL", delta: solDelta });
-      for (const [sym, d] of Object.entries(tokens)) {
-        if (Math.abs(d) > 1e-6) legs.push({ asset: sym, delta: d });
-      }
-      if (!legs.length) return null;
-
+      const eth = parseInt(bsTx.value || "0", 10) / 1e18;
       const price = AIRTAG.appPrice ? AIRTAG.appPrice() : 0;
-      legs.forEach((l) => { l.usd = Math.abs(l.delta) * (l.asset === "SOL" ? price : 1); });
-      legs.sort((a, b) => b.usd - a.usd);
-      const main = legs[0];
+      const usd = eth * price;
 
-      const wantSign = main.delta > 0 ? -1 : 1; // counterparty moved the other way
-      const counterparty = main.asset === "SOL"
-        ? counterpartySol(tx, keys, idx, wantSign)
-        : counterpartyToken(meta, watched.addr, main.asset, wantSign);
+      const types = bsTx.tx_types || bsTx.transaction_types || [];
+      const isTokenOnly = eth < 1e-9 && types.includes("token_transfer");
+      const bridgeTouch =
+        fromH === C.ARBSYS || toH === C.ARBSYS ||
+        BRIDGE_METHODS.has(bsTx.method) ||
+        types.includes("rollup");
 
+      /* attribution: prefer the watched side; unattributed large
+       * transfers surface under the Unattributed entity */
+      let watched = wTo || wFrom, dir, counterparty;
+      if (wTo)       { dir = "IN";  counterparty = fromH; }
+      else if (wFrom){ dir = "OUT"; counterparty = toH; }
+      else {
+        if (eth < C.API.FEED_MIN_UNATTRIB_ETH && !bridgeTouch) return null;
+        watched = { entity: "Unattributed", tag: "large-transfer", type: "WHALE" };
+        dir = "OUT"; counterparty = toH;
+      }
+      if (eth < 1e-9 && !isTokenOnly && !bridgeTouch) return null;
+
+      const ts = bsTx.timestamp ? Date.parse(bsTx.timestamp) : Date.now();
       return {
-        sig: tx.transaction.signatures[0],
-        slot: tx.slot,
-        time: (tx.blockTime || Math.floor(Date.now() / 1000)) * 1000,
+        sig: bsTx.hash,
+        time: isNaN(ts) ? Date.now() : ts,
         entity: watched.entity,
         etype: watched.type,
         tag: watched.tag,
-        dir: main.delta > 0 ? "IN" : "OUT",
-        asset: main.asset,
-        amount: Math.abs(main.delta),
-        usd: main.usd,
-        counterparty,
+        dir,
+        asset: isTokenOnly ? "ERC-20" : "ETH",
+        method: bsTx.method || null,
+        amount: isTokenOnly ? null : eth,
+        usd: isTokenOnly ? 0 : usd,
+        counterparty: counterparty || null,
         bridgeTouch,
-        legs: legs.length,
       };
     },
 
-    /* Outgoing transfers from `addr` in a tx — for the tracer. */
-    outgoing(tx, addr) {
-      if (!tx || !tx.meta || tx.meta.err) return [];
-      const keys = keyList(tx);
-      const idx = keys.findIndex((k) => k.pubkey === addr);
-      if (idx < 0) return [];
-      const meta = tx.meta;
-      let d = (meta.postBalances[idx] || 0) - (meta.preBalances[idx] || 0);
-      if (idx === 0) d += meta.fee || 0;
-      if (d >= -1e4) return []; // not a meaningful SOL debit (>0.00001 SOL)
+    /* Outgoing native transfers from `addr` across a list of its
+     * Blockscout txs, time-gated for the tracer. */
+    outgoing(items, addr, afterMs) {
+      const a = lower(addr);
       const out = [];
-      for (let i = 0; i < keys.length; i++) {
-        if (i === idx) continue;
-        const pk = keys[i].pubkey;
-        if (C.PROGRAM_IDS.has(pk) || C.BRIDGE_PROGRAMS.has(pk)) continue;
-        const gain = (meta.postBalances[i] || 0) - (meta.preBalances[i] || 0);
-        if (gain > 1e4) {
-          out.push({ to: pk, sol: gain / 1e9, sig: tx.transaction.signatures[0], time: (tx.blockTime || 0) * 1000 });
-        }
+      for (const t of items || []) {
+        if (t.status === "error") continue;
+        if (lower(t.from && t.from.hash) !== a) continue;
+        const eth = parseInt(t.value || "0", 10) / 1e18;
+        if (eth < 1e-6) continue;
+        const ts = t.timestamp ? Date.parse(t.timestamp) : 0;
+        if (afterMs && ts < afterMs - 60_000) continue;
+        const to = lower(t.to && t.to.hash);
+        if (!to) continue;
+        out.push({ to, eth, hash: t.hash, time: ts });
       }
-      return out.sort((a, b) => b.sol - a.sol);
+      return out.sort((x, y) => x.time - y.time);
     },
   };
 

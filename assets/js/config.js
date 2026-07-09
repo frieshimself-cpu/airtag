@@ -1,15 +1,17 @@
 /* ============================================================
  * VEDANT // config.js
  * Verifiable Exchange-flow Detection, Attribution & Network
- * Tracing — Solana edition. Entity intelligence registry, RPC
- * topology, detector parameters, engine constants.
+ * Tracing — Robinhood Chain edition (EVM L2, chain-id 4663).
  *
  * DATA PROVENANCE:
- *  - WATCHLIST addresses are publicly documented exchange hot/cold
- *    wallets (labeled on Solscan / SolanaFM / public incident
- *    reports). Their transactions are fetched live from public
- *    Solana JSON-RPC and shown with SRC=WS (websocket push) or
- *    SRC=RPC (poll). Signatures link to the explorer.
+ *  - WATCHLIST entries are on-chain venue/system contracts that
+ *    are publicly visible on the chain's Blockscout explorer
+ *    (WETH vault, PoolManager DEX, router, ArbSys bridge-exit
+ *    precompile). Their traffic is fetched live from public
+ *    JSON-RPC + the Blockscout REST API. Tx hashes link to the
+ *    explorer.
+ *  - WHALE-xx entities are discovered dynamically at boot from
+ *    the live top-accounts API (largest EOAs by balance).
  *  - Instant-swap services rotate per-order deposit addresses and
  *    publish no wallet set; their rows come from the simulation
  *    layer and are tagged SRC=HEUR (illustrative only).
@@ -23,115 +25,82 @@ AIRTAG.CONFIG = {
   BRAND: {
     name: "VEDANT",
     expansion: "VERIFIABLE EXCHANGE-FLOW DETECTION · ATTRIBUTION & NETWORK TRACING",
-    version: "v6.1.0",
-    build: "e7d41c9",
-    cluster: "solana-mainnet",
+    version: "v7.0.0",
+    build: "a3f92e1",
+    cluster: "robinhood-mainnet",
+    chainId: 4663,
     shard: "04/16",
   },
 
-  /* The $VEDANT token. CA is real; market data is polled live from
-   * DexScreener and lights up the panel the moment a pool exists.
-   * Until then the panel shows an honest PRE-LAUNCH state. */
+  /* The $VEDANT token (Robinhood Chain, ERC-20). Telemetry comes
+   * from two live sources: the chain's Blockscout token API
+   * (deployment, holders, supply) and DexScreener (pool price /
+   * liquidity / volume once a pair is indexed). The panel walks
+   * PRE-DEPLOY → DEPLOYED·AWAITING LIQUIDITY → LIVE honestly. */
   TOKEN: {
     symbol: "VEDANT",
-    ca: "FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump",
-    chain: "solana",
-    dexscreenerPairs: "https://api.dexscreener.com/token-pairs/v1/solana/FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump",
+    ca: "0xdb3995467291870629e6f8f838b8e901196eb4bb",
+    chain: "robinhood-chain",
+    blockscoutToken: "https://robinhoodchain.blockscout.com/api/v2/tokens/0xdb3995467291870629e6f8f838b8e901196eb4bb",
+    dexscreenerPairs: "https://api.dexscreener.com/latest/dex/tokens/0xdb3995467291870629e6f8f838b8e901196eb4bb",
     links: {
-      pump: "https://pump.fun/coin/FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump",
-      dexscreener: "https://dexscreener.com/solana/FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump",
-      solscan: "https://solscan.io/token/FsTedVpia2n7CrhyhVCQ7QTFaSeJMkT4JbkWrSxcpump",
+      explorer: "https://robinhoodchain.blockscout.com/token/0xdb3995467291870629e6f8f838b8e901196eb4bb",
+      dexscreener: "https://dexscreener.com/search?q=0xdb3995467291870629e6f8f838b8e901196eb4bb",
     },
     pollMs: 30_000,
   },
 
-  RPC: {
-    /* failover chain — each entry: HTTP endpoint + its WS twin */
-    ENDPOINTS: [
-      { http: "https://solana-rpc.publicnode.com", ws: "wss://solana-rpc.publicnode.com" },
-      { http: "https://api.mainnet-beta.solana.com", ws: "wss://api.mainnet-beta.solana.com" },
-    ],
+  CHAIN: {
+    RPC_HTTP: "https://rpc.mainnet.chain.robinhood.com",
+    RPC_WS: "wss://rpc.mainnet.chain.robinhood.com",
+    BLOCKSCOUT: "https://robinhoodchain.blockscout.com/api/v2",
+    EXPLORER_TX: "https://robinhoodchain.blockscout.com/tx/",
+    EXPLORER_ADDR: "https://robinhoodchain.blockscout.com/address/",
     TIMEOUT_MS: 9000,
-    /* token bucket — stays well under public endpoint quotas */
+    /* token bucket shared by RPC + REST — polite to public infra */
     BUCKET_CAPACITY: 6,
     BUCKET_REFILL_PER_SEC: 2.5,
-    WS_MAX_LOG_SUBS: 8,          // logsSubscribe slots (top wallets by priority)
     WS_RECONNECT_BASE_MS: 3000,
   },
 
   API: {
-    COINGECKO_PRICE: "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd&include_24hr_change=true",
-    POLL_TELEMETRY_MS: 25_000,    // epoch / tps / price
-    POLL_WALLET_CYCLE_MS: 18_000, // one poll wave (subset of wallets)
-    WALLETS_PER_CYCLE: 3,
-    TX_FETCH_PER_WALLET: 2,       // new tx bodies fetched per wallet per wave
+    POLL_TELEMETRY_MS: 25_000,    // stats / gas / price / block
+    POLL_FEED_MS: 15_000,         // global latest-tx sweep
+    POLL_VENUE_CYCLE_MS: 30_000,  // one venue-scan wave
+    VENUES_PER_CYCLE: 2,
     TRACE_MAX_REQUESTS: 40,
     TRACE_MAX_FANOUT: 3,
-    TRACE_TX_PER_HOP: 2,
+    TRACE_TX_PER_HOP: 3,
+    FEED_MIN_UNATTRIB_ETH: 0.1,   // unattributed txs below this stay out of the feed
   },
 
-  ASSETS: {
-    SOL: { decimals: 9 },
-    MINTS: {
-      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": { sym: "USDC", peg: 1 },
-      "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": { sym: "USDT", peg: 1 },
-    },
-  },
+  /* ArbSys precompile — L2→L1 exits route through it */
+  ARBSYS: "0x0000000000000000000000000000000000000064",
 
-  /* program ids excluded from counterparty extraction */
-  PROGRAM_IDS: new Set([
-    "11111111111111111111111111111111",              // system
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",   // spl-token
-    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",   // token-2022
-    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",  // ata
-    "ComputeBudget111111111111111111111111111111",
-    "Vote111111111111111111111111111111111111111",
-    "SysvarRent111111111111111111111111111111111",
-    "SysvarC1ock11111111111111111111111111111111",
-    "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo",
-    "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
-  ]),
-
-  /* cross-chain bridge programs — a tx touching these gets the
-   * bridge-exposure risk premium (real detection, D-04) */
-  BRIDGE_PROGRAMS: new Set([
-    "worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth",   // wormhole core
-    "wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb",   // wormhole token bridge
-    "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",   // debridge dln
-    "A5Zf9nYy4qWM7qsvWsRGCcRnXnDBWD2ZNmqzTwkfSiL",   // allbridge
-  ]),
-
-  /* Chain-watched custodial wallets (publicly documented labels).
-   * priority 1 wallets get websocket log subscriptions; stale or
-   * low-traffic labels sit in the poll rotation only. */
+  /* Chain-watched venue/system endpoints (visible on Blockscout). */
   WATCHLIST: [
-    { addr: "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9", entity: "Binance",    tag: "hot-1",  type: "CEX", priority: 1 },
-    { addr: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", entity: "Binance",    tag: "cold-1", type: "CEX", priority: 1 },
-    { addr: "H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS", entity: "Coinbase",   tag: "hot-1",  type: "CEX", priority: 1 },
-    { addr: "2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm", entity: "Coinbase",   tag: "hot-2",  type: "CEX", priority: 1 },
-    { addr: "AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2", entity: "Bybit",      tag: "hot-1",  type: "CEX", priority: 1 },
-    { addr: "BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6", entity: "KuCoin",     tag: "hot-1",  type: "CEX", priority: 1 },
-    { addr: "u6PJ8DtQuPFnfmwHbGFULQ4u4EgjDiyYKjVEsynXq2w", entity: "Gate.io",    tag: "hot-1",  type: "CEX", priority: 1 },
-    { addr: "ASTyfSima4LLAdDgoFGkgqoKowG1LZFDr9fAQrg7iaJZ", entity: "MEXC",       tag: "hot-1",  type: "CEX", priority: 1 },
-    { addr: "AobVSwdW9BbpMdJvTqeCN4hPAmh4rHm7vwLnQ5ATSyrS", entity: "Crypto.com", tag: "hot-1",  type: "CEX", priority: 2 },
-    { addr: "A77HErqtfN1hLLpvZ9pCtu66FEtM8BveoaKbbMoZ4RiR", entity: "Bitget",     tag: "hot-1",  type: "CEX", priority: 2 },
-    { addr: "5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD", entity: "OKX",        tag: "hot-1",  type: "CEX", priority: 3 },
-    { addr: "FWznbcNXWQuHTawe9RxvQ2LdCENssh12dsznf4RiouN5", entity: "Kraken",     tag: "hot-1",  type: "CEX", priority: 3 },
+    { addr: "0x0bd7d308f8e1639fab988df18a8011f41eacad73", entity: "WETH Vault",  tag: "wrap/unwrap", type: "VENUE", priority: 1 },
+    { addr: "0x8366a39cc670b4001a1121b8f6a443a643e40951", entity: "PoolManager", tag: "dex-core",    type: "VENUE", priority: 1 },
+    { addr: "0x65050a9b7e5075a2ba5ced7b1b64ee66262c40dc", entity: "RH Router",   tag: "entrypoint",  type: "VENUE", priority: 1 },
+    { addr: "0x0000000000000000000000000000000000000064", entity: "RH Bridge",   tag: "arbsys-exit", type: "VENUE", priority: 1 },
   ],
 
-  /* entity registry for exposure/topology; swap services rotate
-   * deposit addresses → simulation layer (SRC=HEUR) */
+  /* dynamic whale slots — filled at boot from live top accounts */
+  WHALE_SLOTS: 5,
+
+  /* entity registry for exposure/scope/topology; swap services
+   * rotate deposit addresses → simulation layer (SRC=HEUR) */
   ENTITIES: [
-    { name: "Binance",      type: "CEX",  weight: 24, baseRisk: 16 },
-    { name: "Coinbase",     type: "CEX",  weight: 16, baseRisk: 12 },
-    { name: "Bybit",        type: "CEX",  weight: 10, baseRisk: 24 },
-    { name: "OKX",          type: "CEX",  weight:  8, baseRisk: 22 },
-    { name: "KuCoin",       type: "CEX",  weight:  7, baseRisk: 30 },
-    { name: "Gate.io",      type: "CEX",  weight:  6, baseRisk: 28 },
-    { name: "MEXC",         type: "CEX",  weight:  6, baseRisk: 32 },
-    { name: "Crypto.com",   type: "CEX",  weight:  5, baseRisk: 14 },
-    { name: "Bitget",       type: "CEX",  weight:  4, baseRisk: 26 },
-    { name: "Kraken",       type: "CEX",  weight:  4, baseRisk: 14 },
+    { name: "WETH Vault",   type: "VENUE", weight: 20, baseRisk: 10 },
+    { name: "PoolManager",  type: "VENUE", weight: 16, baseRisk: 18 },
+    { name: "RH Router",    type: "VENUE", weight: 14, baseRisk: 14 },
+    { name: "RH Bridge",    type: "VENUE", weight: 10, baseRisk: 30 },
+    { name: "WHALE-01",     type: "WHALE", weight:  6, baseRisk: 34 },
+    { name: "WHALE-02",     type: "WHALE", weight:  5, baseRisk: 34 },
+    { name: "WHALE-03",     type: "WHALE", weight:  4, baseRisk: 34 },
+    { name: "WHALE-04",     type: "WHALE", weight:  3, baseRisk: 34 },
+    { name: "WHALE-05",     type: "WHALE", weight:  3, baseRisk: 34 },
+    { name: "Unattributed", type: "WHALE", weight:  2, baseRisk: 40 },
     { name: "ChangeNOW",    type: "SWAP", weight:  5, baseRisk: 58 },
     { name: "SimpleSwap",   type: "SWAP", weight:  4, baseRisk: 60 },
     { name: "FixedFloat",   type: "SWAP", weight:  3, baseRisk: 66 },
@@ -141,8 +110,8 @@ AIRTAG.CONFIG = {
   ],
 
   SWAP_PAIRS: [
-    "SOL → XMR", "SOL → USDT·TRC20", "SOL → BTC", "SOL → ETH",
-    "USDC → SOL", "SOL → LTC", "USDT → SOL", "SOL → TRX",
+    "ETH → XMR", "ETH → USDT·TRC20", "ETH → BTC", "ETH → SOL",
+    "USDG → ETH", "ETH → LTC", "USDE → ETH", "ETH → TRX",
   ],
 
   DETECT: {
@@ -150,13 +119,13 @@ AIRTAG.CONFIG = {
     BURST_MIN: 3,
     FORWARD_WINDOW_S: 7_200,       // D-01: deposit-addr inference — forward within 2h
     FORWARD_MIN_RATIO: 0.85,       //        …of ≥85% of received value
-    ROUND_SOL_UNITS: [10000, 5000, 1000, 500, 100], // D-03 round-notional
+    ROUND_ETH_UNITS: [1000, 500, 100, 50, 10], // D-03 round-notional (ETH)
   },
 
   THRESHOLDS: {
-    ALERT_USD: 500_000,
+    ALERT_USD: 250_000,
     ALERT_RISK: 85,
-    WHALE_USD: 2_000_000,
+    WHALE_USD: 1_000_000,
   },
 
   /* Detection stack. `live` engines expose real counters wired by
@@ -165,24 +134,23 @@ AIRTAG.CONFIG = {
     { id: "D-01", name: "Deposit-address forwarding inference", kind: "live" },
     { id: "D-02", name: "Temporal burst / batching detector",   kind: "live" },
     { id: "D-03", name: "Round-notional automation signature",  kind: "live" },
-    { id: "D-04", name: "Bridge-program exposure tagging",      kind: "live" },
+    { id: "D-04", name: "Bridge exit / ArbSys tagging",         kind: "live" },
     { id: "H-12", name: "Swap-service order-size echo",         kind: "model", base: 0.71 },
     { id: "H-17", name: "Cross-chain settlement matching",      kind: "model", base: 0.66 },
     { id: "R-07", name: "Rule engine — threshold triggers",     kind: "model", base: 1.00 },
   ],
 
   TICKER_LINES: [
-    "VEDANT attribution graph: 38.4M address clusters · 214M accounts indexed (solana-mainnet)",
+    "VEDANT attribution graph bound to robinhood-mainnet · chain-id 4663 (HOOD)",
+    "venue registry: WETH vault · PoolManager · RH Router · ArbSys bridge-exit",
+    "whale discovery: top-balance EOAs resolved live from Blockscout at boot",
     "deposit-address inference D-01 armed — forwarding ratio ≥0.85 within 7200s",
     "burst detector D-02 window 90s · min cardinality 3",
-    "bridge-exposure tagger D-04 tracking wormhole · debridge · allbridge programs",
-    "websocket lane: logsSubscribe on priority-1 custodial wallets",
-    "rpc failover chain: publicnode → mainnet-beta · token-bucket 2.5 rps",
-    "rule engine R-07 armed: notional ≥ $500K · risk ≥ 85",
-    "entity registry: 12 chain-watched custodial wallets · 6 instant-swap services (sim)",
-    "stablecoin lane: USDC · USDT balance-delta decoding enabled",
-    "$VEDANT token module: live DexScreener pool telemetry bound to CA FsTedV…cpump",
+    "bridge tagger D-04 watching ArbSys exits (0x…0064) and L1 deposits",
+    "data plane: JSON-RPC (rpc.mainnet.chain.robinhood.com) + Blockscout REST · bucket 2.5 rps",
+    "websocket lane: eth_subscribe newHeads · push-triggered feed sweeps",
+    "rule engine R-07 armed: notional ≥ $250K · risk ≥ 85",
+    "$VEDANT token module: live DexScreener pool telemetry bound to CA FsTedV…cpump (solana)",
     "signal-scope: polar risk projection · entity azimuth × notional radius",
-    "kernel: 7 detection engines · 2 data lanes · vector clock synchronized",
   ],
 };

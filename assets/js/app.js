@@ -1,9 +1,9 @@
 /* ============================================================
  * VEDANT // app.js
- * Orchestrator — Solana edition.
- * Boot, telemetry pollers, websocket wiring, wallet poll
- * rotation, unified feed, detection panels, alerting, scope,
- * heatmap, systems strip, threat index, ticker.
+ * Orchestrator — Robinhood Chain edition.
+ * Boot, telemetry pollers, websocket wiring, whale discovery,
+ * Blockscout feed sweeps + venue scans, unified feed, detection
+ * panels, alerting, scope, heatmap, systems strip, threat, ticker.
  * ============================================================ */
 
 (function () {
@@ -20,12 +20,10 @@
     if (a >= 1e3) return (v / 1e3).toFixed(1) + "K";
     return Math.round(v).toString();
   };
-  const fmtAmt = (v, asset) => {
-    if (asset === "SOL") {
-      return v >= 1000 ? Math.round(v).toLocaleString("en-US")
-        : v >= 1 ? v.toFixed(2) : v >= 0.001 ? v.toFixed(4) : v.toFixed(6);
-    }
-    return v >= 1000 ? Math.round(v).toLocaleString("en-US") : v.toFixed(2);
+  const fmtAmt = (v) => {
+    if (v == null) return "—";
+    return v >= 1000 ? Math.round(v).toLocaleString("en-US")
+      : v >= 1 ? v.toFixed(3) : v >= 0.001 ? v.toFixed(5) : v.toFixed(7);
   };
   const pad = (n) => String(n).padStart(2, "0");
   function fmtTime(ms) {
@@ -37,30 +35,29 @@
     }
     return hhmmss;
   }
-  const short = (pk) => pk.slice(0, 4) + "…" + pk.slice(-4);
+  const short = (h) => h.length > 12 ? h.slice(0, 6) + "…" + h.slice(-4) : h;
 
   /* ---------- state ---------- */
 
   const State = {
-    solPrice: null,
+    ethPrice: null,
     events: [],
     seen: new Set(),
     paused: false,
     alerts: [],
     filters: { entity: "", dir: "", src: "", minUsd: 0 },
-    cursors: new Map(),         // wallet addr → newest seen signature
     rotation: 0,
-    wsQueue: [],                // pending {watched, sig} from logsSubscribe
-    wsBusy: false,
-    clock: 0,                   // monotonic vector-clock proxy
-    addStamps: [],              // fresh-event timestamps (throughput)
+    clock: 0,
+    addStamps: [],
+    wsSweepPending: false,
+    lastWsSweep: 0,
   };
-  const FALLBACK_SOL = 150;
-  AIRTAG.appPrice = () => State.solPrice || FALLBACK_SOL;
+  const FALLBACK_ETH = 1700;
+  AIRTAG.appPrice = () => State.ethPrice || FALLBACK_ETH;
 
   /* live internals surfaced to the systems strip (fx.js) */
   AIRTAG.Metrics = {
-    get queueDepth()      { return State.wsQueue.length; },
+    get queueDepth()      { return State.wsSweepPending ? 1 : 0; },
     get eventCount()      { return State.events.length; },
     get throughputPerMin() {
       const cut = Date.now() - 60_000;
@@ -71,22 +68,30 @@
     get vclock()          { return State.clock; },
   };
 
-  const WATCH_BY_ADDR = new Map(C.WATCHLIST.map((w) => [w.addr, w]));
+  /* watch registry: static venues (lowercased) + discovered whales */
+  const STATIC_WATCH = new Map(C.WATCHLIST.map((w) => [w.addr.toLowerCase(), w]));
+  AIRTAG.whaleMap = new Map();
+  function watchMap() {
+    const m = new Map(STATIC_WATCH);
+    for (const [k, v] of AIRTAG.whaleMap) m.set(k, v);
+    return m;
+  }
   const POLL_ORDER = [...C.WATCHLIST].sort((a, b) => a.priority - b.priority);
 
   /* ---------- boot sequence ---------- */
 
   const BOOT_LINES = [
-    ["mod", "vedant-core        ", "loading attribution graph shard 04/16 (solana-mainnet)"],
+    ["mod", "vedant-core        ", "loading attribution graph shard 04/16 (robinhood-mainnet · chain-id 4663)"],
     ["ok",  "vedant-core        ", "graph mounted — 38.4M clusters resident"],
-    ["mod", "rpc-plane          ", "failover chain: publicnode → mainnet-beta · bucket 2.5 rps"],
-    ["mod", "ws-lane            ", "slotSubscribe + logsSubscribe on priority-1 custodial wallets"],
-    ["mod", "decoder            ", "SOL balance-delta + USDC/USDT token-delta lanes online"],
+    ["mod", "data-plane         ", "JSON-RPC rpc.mainnet.chain.robinhood.com + Blockscout REST · bucket 2.5 rps"],
+    ["mod", "ws-lane            ", "eth_subscribe newHeads → push-triggered feed sweeps"],
+    ["mod", "venue-registry     ", "arming WETH vault · PoolManager · RH Router · ArbSys bridge-exit"],
+    ["mod", "whale-discovery    ", "resolving top-balance EOAs from Blockscout top-accounts"],
+    ["mod", "decoder            ", "native ETH-value + ERC-20 method decode lanes online"],
     ["mod", "detectors          ", "arming D-01 deposit-inference · D-02 burst · D-03 round · D-04 bridge"],
     ["warn","detectors          ", "H-17 cross-chain matcher in warm-up (model v9 @ 62%)"],
-    ["mod", "signal-scope       ", "polar projection kernel online · sweep synchronized"],
-    ["mod", "token-module       ", "binding $VEDANT CA FsTedV…cpump → DexScreener telemetry"],
-    ["mod", "rules              ", "R-07 threshold engine armed ($500K / risk 85)"],
+    ["mod", "token-module       ", "binding $VEDANT ERC-20 0xdb39…b4bb → Blockscout + DexScreener"],
+    ["mod", "rules              ", "R-07 threshold engine armed ($250K / risk 85)"],
     ["mod", "sim-layer          ", "instant-swap intercept simulation online [SRC=HEUR]"],
     ["ok",  "vedant             ", "all subsystems nominal — entering live mode"],
   ];
@@ -94,12 +99,12 @@
   async function bootSequence() {
     const el = document.getElementById("boot-log");
     for (const [cls, mod, msg] of BOOT_LINES) {
-      await new Promise((r) => setTimeout(r, 130 + Math.random() * 220));
+      await new Promise((r) => setTimeout(r, 120 + Math.random() * 200));
       const line = document.createElement("div");
       line.innerHTML = `<span class="${cls}">[${cls === "warn" ? "WARN" : cls === "ok" ? " OK " : "LOAD"}]</span> <span class="mod">${mod}</span> ${msg}`;
       el.appendChild(line);
     }
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 380));
     document.body.dataset.mode = "live";
   }
 
@@ -123,50 +128,69 @@
 
   let telemetryTick = 0;
   async function pollTelemetry() {
-    const wantSamples = telemetryTick++ % 3 === 0; // perf samples every ~75s
-    const [epoch, price, samples] = await Promise.all([
-      Rpc.epochInfo(),
-      Rpc.solPrice(),
-      wantSamples ? Rpc.perfSamples(150) : Promise.resolve(null),
+    const wantChart = telemetryTick++ % 3 === 0;
+    const [block, stats, chart] = await Promise.all([
+      Rpc.blockNumber(),
+      Rpc.stats(),
+      wantChart ? Rpc.dailyTxChart() : Promise.resolve(null),
     ]);
-    if (epoch) {
-      setSlot(epoch.absoluteSlot);
-      const pct = (epoch.slotIndex / epoch.slotsInEpoch) * 100;
-      document.getElementById("tm-epoch").textContent = epoch.epoch;
-      document.getElementById("tm-epoch-bar").style.width = pct.toFixed(1) + "%";
-      document.getElementById("tm-epoch-pct").textContent = pct.toFixed(1) + "%";
-    }
-    if (price) {
-      State.solPrice = price.usd;
-      document.getElementById("tm-price").textContent =
-        "$" + price.usd.toLocaleString("en-US", { maximumFractionDigits: 2 });
-      const deltaEl = document.getElementById("tm-price-delta");
-      if (typeof price.change24h === "number") {
-        const up = price.change24h >= 0;
-        deltaEl.textContent = (up ? "▲" : "▼") + Math.abs(price.change24h).toFixed(1) + "%";
-        deltaEl.className = "tm-delta " + (up ? "up" : "down");
+    if (block != null) setBlock(block);
+    if (stats && !stats.notFound) {
+      if (stats.coin_price) {
+        State.ethPrice = parseFloat(stats.coin_price);
+        document.getElementById("tm-price").textContent =
+          "$" + State.ethPrice.toLocaleString("en-US", { maximumFractionDigits: 2 });
       }
+      const chg = stats.coin_price_change_percentage;
+      const deltaEl = document.getElementById("tm-price-delta");
+      if (chg != null) {
+        const up = chg >= 0;
+        deltaEl.textContent = (up ? "▲" : "▼") + Math.abs(chg).toFixed(1) + "%";
+        deltaEl.className = "tm-delta " + (up ? "up" : "down");
+      } else { deltaEl.textContent = ""; }
+      if (stats.gas_prices) {
+        document.getElementById("tm-gas").textContent =
+          (stats.gas_prices.average != null ? stats.gas_prices.average : stats.gas_prices.slow) + "";
+      }
+      const util = (stats.network_utilization_percentage || 0) * 100;
+      document.getElementById("tm-util-bar").style.width = Math.min(100, Math.max(1, util)).toFixed(1) + "%";
+      document.getElementById("tm-util-pct").textContent = util < 0.01 ? "<0.01%" : util.toFixed(2) + "%";
     }
-    if (samples && samples.length) {
-      AIRTAG.Throughput.setSamples(samples);
-      const recent = samples.slice(0, 3);
-      const tps = recent.reduce((s, x) => s + x.numTransactions / (x.samplePeriodSecs || 60), 0) / recent.length;
-      document.getElementById("tm-tps").textContent = Math.round(tps).toLocaleString("en-US");
+    if (chart && chart.length) {
+      AIRTAG.Throughput.setDaily(chart);
+      const latest = chart[0].transactions_count;
+      document.getElementById("tm-tps").textContent =
+        latest >= 1e6 ? (latest / 1e6).toFixed(2) + "M" : (latest / 1e3).toFixed(0) + "K";
     }
     document.getElementById("tm-latency").textContent =
       Rpc.lastLatencyMs != null ? Rpc.lastLatencyMs + " ms" : "n/a";
     document.getElementById("tm-calls").textContent = Rpc.callCount.toLocaleString("en-US");
   }
 
-  let lastSlotDom = 0;
-  function setSlot(slot) {
-    if (slot <= lastSlotDom) return;
-    lastSlotDom = slot;
+  let lastBlockDom = 0;
+  function setBlock(b) {
+    if (b <= lastBlockDom) return;
+    lastBlockDom = b;
     State.clock++;
-    document.getElementById("tm-slot").textContent = slot.toLocaleString("en-US");
+    document.getElementById("tm-slot").textContent = b.toLocaleString("en-US");
   }
 
-  /* ---------- unified feed ---------- */
+  /* ---------- whale discovery ---------- */
+
+  async function discoverWhales() {
+    const accts = await Rpc.topAccounts();
+    if (!accts) return;
+    const eoas = accts.filter((a) => !a.is_contract && a.hash).slice(0, C.WHALE_SLOTS);
+    const map = new Map();
+    eoas.forEach((a, i) => {
+      const entity = "WHALE-" + pad(i + 1);
+      const bal = (parseInt(a.coin_balance || "0", 10) / 1e18);
+      map.set(a.hash.toLowerCase(), { entity, tag: bal.toFixed(0) + " ETH", type: "WHALE", addr: a.hash.toLowerCase() });
+    });
+    AIRTAG.whaleMap = map;
+  }
+
+  /* ---------- feed ---------- */
 
   function riskClass(r) {
     return r >= 85 ? "r-crit" : r >= 60 ? "r-high" : r >= 35 ? "r-med" : "r-low";
@@ -215,24 +239,28 @@
     body.innerHTML = rows.map((ev, i) => {
       const real = ev.src !== "HEUR";
       const sigCell = real
-        ? `<a class="txid" href="https://solscan.io/tx/${ev.sig}" target="_blank" rel="noopener">${ev.sig.slice(0, 8)}…${ev.sig.slice(-6)}</a>`
+        ? `<a class="txid" href="${C.CHAIN.EXPLORER_TX}${ev.sig}" target="_blank" rel="noopener">${ev.sig.slice(0, 8)}…${ev.sig.slice(-6)}</a>`
         : `<span class="txid synth" title="heuristic intercept — not chain-attested">${ev.sig.slice(0, 8)}…${ev.sig.slice(-6)}</span>`;
-      const dirChip = ev.dir === "IN" ? '<span class="chip dir-in">IN → CEX</span>'
-        : ev.dir === "OUT" ? '<span class="chip dir-out">CEX → OUT</span>'
+      const dirChip = ev.dir === "IN" ? '<span class="chip dir-in">IN → VENUE</span>'
+        : ev.dir === "OUT" ? '<span class="chip dir-out">VENUE → OUT</span>'
         : '<span class="chip dir-swap">SWAP</span>';
       const srcChip = ev.src === "WS" ? '<span class="chip src-ws">WS</span>'
         : ev.src === "RPC" ? '<span class="chip src-rpc">RPC</span>'
         : '<span class="chip src-heur">HEUR</span>';
-      const asset = (ev.pair || ev.asset) + (ev.bridgeTouch ? ' <span class="bridge-flag" title="bridge program invoked (D-04)">⛓</span>' : "");
+      const assetLabel = ev.asset === "ERC-20" && ev.method ? ev.method : (ev.pair || ev.asset);
+      const asset = assetLabel + (ev.bridgeTouch ? ' <span class="bridge-flag" title="bridge exit / ArbSys (D-04)">⛓</span>' : "");
       const cp = ev.counterparty
-        ? `<span class="cp" title="${ev.counterparty}">${short(ev.counterparty)}</span>` : "—";
+        ? (real
+            ? `<a class="cp" href="${C.CHAIN.EXPLORER_ADDR}${ev.counterparty}" target="_blank" rel="noopener" title="${ev.counterparty}">${short(ev.counterparty)}</a>`
+            : `<span class="cp" title="${ev.counterparty}">${short(ev.counterparty)}</span>`)
+        : "—";
       return `<tr class="${markFresh && i === 0 ? "fresh" : ""}">
         <td>${fmtTime(ev.time)}</td>
         <td>${sigCell}</td>
         <td class="entity-tag">${ev.entity} <span class="etype">${ev.etype}·${ev.tag || ""}</span></td>
         <td>${dirChip}</td>
         <td>${asset}</td>
-        <td class="num">${fmtAmt(ev.amount || 0, ev.asset)}</td>
+        <td class="num">${ev.amount != null ? fmtAmt(ev.amount) : "—"}</td>
         <td class="num">$${AIRTAG.fmtUsd(ev.usd || 0)}</td>
         <td>${cp}</td>
         <td><div class="risk-cell ${riskClass(ev.risk)}"><div class="risk-bar"><div class="risk-fill" style="width:${ev.risk}%"></div></div><span class="risk-val">${ev.risk}</span></div></td>
@@ -244,55 +272,50 @@
   /* ---------- websocket lane ---------- */
 
   function wireWs() {
-    Rpc.onSlot = (slot) => setSlot(slot);
-    Rpc.onWalletLog = (addr, sig) => {
-      const watched = WATCH_BY_ADDR.get(addr);
-      if (!watched || State.seen.has(sig + "|" + watched.entity)) return;
-      if (State.wsQueue.length > 24) State.wsQueue.shift(); // shed load, keep newest
-      State.wsQueue.push({ watched, sig });
-      drainWsQueue();
+    Rpc.onBlock = (block) => {
+      setBlock(block);
+      /* push-triggered sweep, debounced to ≤ 1 / 8s */
+      const now = Date.now();
+      if (now - State.lastWsSweep < 8000) return;
+      State.lastWsSweep = now;
+      State.wsSweepPending = true;
+      feedSweep("WS").finally(() => { State.wsSweepPending = false; });
     };
     Rpc.startWs();
   }
 
-  async function drainWsQueue() {
-    if (State.wsBusy) return;
-    State.wsBusy = true;
-    while (State.wsQueue.length) {
-      const { watched, sig } = State.wsQueue.shift();
-      const tx = await Rpc.transaction(sig);
-      const ev = tx && AIRTAG.Decode.flowEvent(tx, watched);
-      if (ev) {
-        ev.src = "WS";
-        if (addEvent(ev)) refreshAnalytics(true);
-      }
+  /* ---------- global latest-tx sweep (Blockscout) ---------- */
+
+  async function feedSweep(src) {
+    const txs = await Rpc.latestTxs();
+    if (!txs) return;
+    const wm = watchMap();
+    let added = 0;
+    for (const t of txs) {
+      const ev = AIRTAG.Decode.flowEvent(t, wm);
+      if (!ev) continue;
+      ev.src = src;
+      if (addEvent(ev)) added++;
     }
-    State.wsBusy = false;
+    if (added) refreshAnalytics(true);
   }
 
-  /* ---------- wallet poll rotation ---------- */
+  /* ---------- per-venue history scan ---------- */
 
-  async function pollWave(initial = false) {
-    const n = initial ? POLL_ORDER.length : C.API.WALLETS_PER_CYCLE;
+  async function venueScan(initial = false) {
+    const n = initial ? POLL_ORDER.length : C.API.VENUES_PER_CYCLE;
+    const wm = watchMap();
     for (let k = 0; k < n; k++) {
       const w = POLL_ORDER[State.rotation % POLL_ORDER.length];
       State.rotation++;
-      const opts = { limit: initial ? 4 : 8 };
-      const cursor = State.cursors.get(w.addr);
-      if (cursor) opts.until = cursor;
-      const sigs = await Rpc.signaturesFor(w.addr, opts);
-      if (!sigs || !sigs.length) continue;
-      State.cursors.set(w.addr, sigs[0].signature);
-      const fresh = sigs.filter((s) => !s.err).slice(0, C.API.TX_FETCH_PER_WALLET);
+      const items = await Rpc.addressTxs(w.addr);
+      if (!items) continue;
       let added = 0;
-      for (const s of fresh) {
-        if (State.seen.has(s.signature + "|" + w.entity)) continue;
-        const tx = await Rpc.transaction(s.signature);
-        const ev = tx && AIRTAG.Decode.flowEvent(tx, w);
-        if (ev) {
-          ev.src = "RPC";
-          if (addEvent(ev, { fresh: !initial })) added++;
-        }
+      for (const t of items.slice(0, 6)) {
+        const ev = AIRTAG.Decode.flowEvent(t, wm);
+        if (!ev) continue;
+        ev.src = "RPC";
+        if (addEvent(ev, { fresh: !initial })) added++;
       }
       if (added) refreshAnalytics(!initial);
     }
@@ -326,7 +349,7 @@
     elNet.textContent = (net >= 0 ? "+$" : "−$") + AIRTAG.fmtUsd(Math.abs(net));
     elNet.className = "st-value " + (net >= 0 ? "in" : "out");
     document.getElementById("st-netflow-foot").textContent =
-      net >= 0 ? "net deposit pressure (sell-side risk)" : "net withdrawal pressure (accumulation)";
+      net >= 0 ? "net inflow to venues (sell-side risk)" : "net outflow from venues (accumulation)";
     document.getElementById("st-inflow").textContent = "$" + AIRTAG.fmtUsd(inUsd);
     document.getElementById("st-outflow").textContent = "$" + AIRTAG.fmtUsd(outUsd);
     document.getElementById("st-deposits").textContent = Detect.DepositRegistry.count();
@@ -340,7 +363,6 @@
     updateThreat(day);
   }
 
-  /* composite threat index over live signals */
   function updateThreat(day) {
     if (!AIRTAG.Fx) return;
     const now = Date.now();
@@ -410,7 +432,7 @@
     }
     el.innerHTML = rows.map(([addr, m]) => `
       <div class="dep-row">
-        <a class="txid" href="https://solscan.io/account/${addr}" target="_blank" rel="noopener">${short(addr)}</a>
+        <a class="txid" href="${C.CHAIN.EXPLORER_ADDR}${addr}" target="_blank" rel="noopener">${short(addr)}</a>
         <span class="dep-ent">⤳ ${m.entity}</span>
         <span class="dep-ev">fwd ${(m.ratio * 100).toFixed(0)}% in ${Math.round(m.dtSec)}s</span>
       </div>`).join("");
@@ -481,9 +503,13 @@
 
     const boot = bootSequence();
 
-    /* try to land live telemetry before backfill, but never block */
-    await Promise.race([pollTelemetry(), new Promise((r) => setTimeout(r, 4500))]);
+    /* try to land live telemetry + whales before backfill, but never block */
+    await Promise.race([
+      Promise.all([pollTelemetry(), discoverWhales()]),
+      new Promise((r) => setTimeout(r, 5000)),
+    ]);
     setInterval(pollTelemetry, C.API.POLL_TELEMETRY_MS);
+    setInterval(discoverWhales, 120_000);
     setInterval(renderDetectors, 5000);
 
     /* HEUR backfill so the 24h analytics open populated */
@@ -499,8 +525,10 @@
 
     /* live lanes */
     wireWs();
-    pollWave(true);
-    setInterval(() => pollWave(false), C.API.POLL_WALLET_CYCLE_MS);
+    feedSweep("RPC");
+    venueScan(true);
+    setInterval(() => feedSweep("RPC"), C.API.POLL_FEED_MS);
+    setInterval(() => venueScan(false), C.API.POLL_VENUE_CYCLE_MS);
     setTimeout(swapLoop, 5000);
   }
 

@@ -1,17 +1,22 @@
 /* ============================================================
  * VEDANT // token.js
- * $VEDANT token module. The contract address is real; market
- * telemetry is polled live from DexScreener. If a liquidity pool
- * exists, the panel renders price / market cap / liquidity / 24h
- * volume / buy-sell pressure and a live-updating micro price
- * trace. Until a pool is indexed, it shows an honest PRE-LAUNCH
- * state and keeps polling so it lights up automatically on bond.
+ * $VEDANT token module — Robinhood Chain ERC-20.
+ *
+ * Two live sources, three honest states:
+ *   PRE-DEPLOY   — contract not found on-chain yet (Blockscout
+ *                  404, no DEX pairs). Module armed, polling.
+ *   DEPLOYED     — Blockscout returns token metadata (name,
+ *                  symbol, holders, supply) but no DEX pool is
+ *                  indexed yet → real on-chain stats shown.
+ *   LIVE         — DexScreener indexes a pair → price / mcap /
+ *                  liquidity / 24h volume / buy-sell pressure
+ *                  and a live-updating price trace.
  * ============================================================ */
 
 (function () {
   const T = AIRTAG.CONFIG.TOKEN;
 
-  const fmt = (v, d = 2) => {
+  const fmt = (v) => {
     if (v == null || isNaN(v)) return "—";
     const a = Math.abs(v);
     if (a >= 1e9) return "$" + (v / 1e9).toFixed(2) + "B";
@@ -26,9 +31,17 @@
     if (v >= 0.0001) return "$" + v.toFixed(6);
     return "$" + v.toExponential(2);
   };
+  const fmtCount = (v) => {
+    const n = parseFloat(v);
+    if (isNaN(n)) return "—";
+    if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+    return Math.round(n).toLocaleString("en-US");
+  };
 
   const Token = {
-    priceSeries: [],   // live-observed prices for the sparkline
+    priceSeries: [],
     el: {},
 
     init() {
@@ -36,9 +49,9 @@
         state: document.getElementById("tok-state"),
         price: document.getElementById("tok-price"),
         change: document.getElementById("tok-change"),
-        mcap: document.getElementById("tok-mcap"),
-        liq: document.getElementById("tok-liq"),
-        vol: document.getElementById("tok-vol"),
+        l1: document.getElementById("tok-l1"), v1: document.getElementById("tok-mcap"),
+        l2: document.getElementById("tok-l2"), v2: document.getElementById("tok-liq"),
+        l3: document.getElementById("tok-l3"), v3: document.getElementById("tok-vol"),
         pressure: document.getElementById("tok-pressure"),
         pbBuy: document.getElementById("tok-pb-buy"),
         pbSell: document.getElementById("tok-pb-sell"),
@@ -55,43 +68,77 @@
       const done = () => { const o = btn.textContent; btn.textContent = "COPIED ✓"; setTimeout(() => (btn.textContent = o), 1400); };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(T.ca).then(done).catch(() => {});
-      } else {
-        const ta = document.createElement("textarea");
-        ta.value = T.ca; document.body.appendChild(ta); ta.select();
-        try { document.execCommand("copy"); done(); } catch {}
-        document.body.removeChild(ta);
       }
     },
 
-    async poll() {
-      let pairs = null;
+    async _fetchJson(url) {
       try {
         const ctl = new AbortController();
         const timer = setTimeout(() => ctl.abort(), 8000);
-        const res = await fetch(T.dexscreenerPairs, { cache: "no-store", signal: ctl.signal });
+        const res = await fetch(url, { cache: "no-store", signal: ctl.signal });
         clearTimeout(timer);
-        if (res.ok) pairs = await res.json();
-      } catch { /* keep last state */ }
-
-      if (!Array.isArray(pairs) || !pairs.length) { this._preLaunch(); return; }
-      /* pick the deepest-liquidity pair */
-      pairs.sort((a, b) => ((b.liquidity && b.liquidity.usd) || 0) - ((a.liquidity && a.liquidity.usd) || 0));
-      this._live(pairs[0]);
+        if (res.status === 404) return { notFound: true };
+        if (!res.ok) return null;
+        return await res.json();
+      } catch { return null; }
     },
 
-    _preLaunch() {
+    async poll() {
+      const [dex, bs] = await Promise.all([
+        this._fetchJson(T.dexscreenerPairs),
+        this._fetchJson(T.blockscoutToken),
+      ]);
+      const pairs = dex && Array.isArray(dex.pairs) ? dex.pairs : (Array.isArray(dex) ? dex : []);
+      if (pairs && pairs.length) {
+        pairs.sort((a, b) => ((b.liquidity && b.liquidity.usd) || 0) - ((a.liquidity && a.liquidity.usd) || 0));
+        this._live(pairs[0]);
+      } else if (bs && !bs.notFound && (bs.symbol || bs.name)) {
+        this._deployed(bs);
+      } else {
+        this._preDeploy();
+      }
+    },
+
+    _setLabels(a, b, c) {
+      if (this.el.l1) this.el.l1.textContent = a;
+      if (this.el.l2) this.el.l2.textContent = b;
+      if (this.el.l3) this.el.l3.textContent = c;
+    },
+
+    _preDeploy() {
       const box = document.getElementById("panel-token");
       if (box) box.classList.remove("token-live");
       this.el.state.className = "tok-state pre";
-      this.el.state.textContent = "◍ PRE-LAUNCH · AWAITING LIQUIDITY POOL";
-      this.el.pair.textContent = "no DEX pool indexed yet — module armed, polling every 30s";
-      ["price", "mcap", "liq", "vol", "change", "pressure"].forEach((k) => {
+      this.el.state.textContent = "◍ PRE-DEPLOY · CONTRACT NOT ON-CHAIN YET";
+      this.el.pair.textContent = "robinhood-chain · module armed, polling Blockscout + DexScreener every 30s";
+      this._setLabels("MARKET CAP", "LIQUIDITY", "VOLUME 24H");
+      ["price", "v1", "v2", "v3", "change", "pressure"].forEach((k) => {
         if (this.el[k]) this.el[k].textContent = "—";
       });
-      if (this.el.change) this.el.change.className = "tok-change";
-      if (this.el.pbBuy) this.el.pbBuy.style.width = "50%";
-      if (this.el.pbSell) this.el.pbSell.style.width = "50%";
-      this._drawSpark();
+      this.el.change.className = "tok-change";
+      this.el.pbBuy.style.width = "50%";
+      this.el.pbSell.style.width = "50%";
+      this._drawSpark("price trace populates once a pool is live");
+    },
+
+    _deployed(bs) {
+      const box = document.getElementById("panel-token");
+      if (box) box.classList.remove("token-live");
+      this.el.state.className = "tok-state pre";
+      this.el.state.textContent = "◉ DEPLOYED · AWAITING LIQUIDITY POOL";
+      this.el.pair.textContent = `${bs.name || "token"} (${bs.symbol || "?"}) · ${bs.type || "ERC-20"} on robinhood-chain`;
+      this._setLabels("HOLDERS", "TOTAL SUPPLY", "DECIMALS");
+      this.el.price.textContent = bs.exchange_rate ? fmtPrice(parseFloat(bs.exchange_rate)) : "—";
+      this.el.v1.textContent = fmtCount(bs.holders_count || bs.holders);
+      const dec = parseInt(bs.decimals || "18", 10);
+      const supply = bs.total_supply ? parseFloat(bs.total_supply) / Math.pow(10, dec) : null;
+      this.el.v2.textContent = supply != null ? fmtCount(supply) : "—";
+      this.el.v3.textContent = isNaN(dec) ? "—" : String(dec);
+      this.el.change.textContent = "";
+      this.el.pressure.textContent = "on-chain metadata live · market data pending pool";
+      this.el.pbBuy.style.width = "50%";
+      this.el.pbSell.style.width = "50%";
+      this._drawSpark("price trace populates once a pool is live");
     },
 
     _live(p) {
@@ -107,11 +154,12 @@
 
       this.el.state.className = "tok-state live";
       this.el.state.textContent = "● LIVE · POOL ACTIVE";
-      this.el.pair.textContent = `${p.dexId || "dex"} · ${(p.baseToken && p.baseToken.symbol) || T.symbol}/${(p.quoteToken && p.quoteToken.symbol) || "SOL"}`;
+      this.el.pair.textContent = `${p.dexId || "dex"} · ${(p.baseToken && p.baseToken.symbol) || T.symbol}/${(p.quoteToken && p.quoteToken.symbol) || "WETH"} · ${p.chainId || "robinhood-chain"}`;
+      this._setLabels("MARKET CAP", "LIQUIDITY", "VOLUME 24H");
       this.el.price.textContent = fmtPrice(price);
-      this.el.mcap.textContent = fmt(mcap);
-      this.el.liq.textContent = fmt(liq);
-      this.el.vol.textContent = fmt(vol);
+      this.el.v1.textContent = fmt(mcap);
+      this.el.v2.textContent = fmt(liq);
+      this.el.v3.textContent = fmt(vol);
       this.el.change.textContent = (ch >= 0 ? "▲ +" : "▼ ") + Math.abs(ch).toFixed(1) + "%";
       this.el.change.className = "tok-change " + (ch >= 0 ? "up" : "down");
 
@@ -128,7 +176,7 @@
       this._drawSpark();
     },
 
-    _drawSpark() {
+    _drawSpark(placeholder) {
       const cv = this.el.spark;
       if (!cv) return;
       const dpr = window.devicePixelRatio || 1;
@@ -145,7 +193,7 @@
         ctx.fillStyle = css.getPropertyValue("--ink-muted").trim();
         ctx.font = "9px " + css.getPropertyValue("--mono").trim();
         ctx.textAlign = "center";
-        ctx.fillText("price trace populates once pool is live", w / 2, h / 2 + 3);
+        ctx.fillText(placeholder || "awaiting data", w / 2, h / 2 + 3);
         return;
       }
       const min = Math.min(...S), max = Math.max(...S), rng = max - min || 1;

@@ -1,20 +1,20 @@
 /* ============================================================
- * AIRTAG // trace.js
- * Solana forward taint-trace engine.
+ * VEDANT // trace.js
+ * Robinhood Chain forward taint-trace engine.
  *
- * Account-model chains have no UTXO graph, so the walk is
- * TEMPORAL: from a root address (or the primary debtor of a tx
- * signature), collect its outgoing SOL transfers, then for each
- * counterparty examine only transactions AFTER the funds arrived
- * (causality window) and follow where they went. Hops are scored
- * against the custodial watchlist; a counterparty that forwards
- * ≥85% of what it received into a labeled hot wallet within 2h
- * is attributed as an exchange deposit address (detector D-01)
- * and registered globally.
+ * The walk is TEMPORAL over the account graph: from a root
+ * address (or a tx hash's sender), collect its outgoing native
+ * transfers via the Blockscout address-history API, then for
+ * each counterparty examine only transactions AFTER the funds
+ * arrived (causality window) and follow where they went. Hops
+ * landing on watched venues (WETH vault, PoolManager, router,
+ * ArbSys bridge exit) or discovered whales are flagged; a
+ * counterparty that forwards ≥85% of what it received into a
+ * watched endpoint within 2h is attributed as a hot-path/deposit
+ * address (detector D-01) and registered globally.
  *
- * All chain data comes from public JSON-RPC through the shared
- * rate-limited client; the walk is request-budgeted. DEMO mode
- * renders a synthetic graph (tagged as such).
+ * All chain data flows through the shared rate-limited client;
+ * the walk is request-budgeted. DEMO renders a synthetic graph.
  * ============================================================ */
 
 (function () {
@@ -22,10 +22,15 @@
   const CSS = getComputedStyle(document.documentElement);
   const col = (n) => CSS.getPropertyValue(n).trim();
 
-  const WATCH = new Map(C.WATCHLIST.map((w) => [w.addr, w]));
-  const short = (pk) => pk.slice(0, 4) + "…" + pk.slice(-4);
-  const fmtSol = (v) => v >= 1000 ? (v / 1000).toFixed(2) + "k"
-    : v >= 1 ? v.toFixed(2) : v >= 0.001 ? v.toFixed(4) : v.toFixed(6);
+  const STATIC_WATCH = new Map(C.WATCHLIST.map((w) => [w.addr.toLowerCase(), w]));
+  const watchLookup = (addr) => {
+    const a = (addr || "").toLowerCase();
+    return STATIC_WATCH.get(a) || (AIRTAG.whaleMap && AIRTAG.whaleMap.get(a)) || null;
+  };
+
+  const short = (h) => h.slice(0, 6) + "…" + h.slice(-4);
+  const fmtEth = (v) => v >= 1000 ? (v / 1000).toFixed(2) + "k"
+    : v >= 1 ? v.toFixed(3) : v >= 0.001 ? v.toFixed(5) : v.toFixed(7);
 
   const Trace = {
     canvas: null, logEl: null, hitsEl: null, badge: null,
@@ -59,28 +64,22 @@
 
     classify(input) {
       const s = input.trim();
-      if (/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(s)) return { kind: "signature", value: s };
-      if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s)) return { kind: "address", value: s };
+      if (/^0x[0-9a-fA-F]{64}$/.test(s)) return { kind: "txhash", value: s.toLowerCase() };
+      if (/^0x[0-9a-fA-F]{40}$/.test(s)) return { kind: "address", value: s.toLowerCase() };
       return null;
     },
 
-    async _tx(sig) {
+    async _addressTxs(addr) {
       if (this.requests >= C.API.TRACE_MAX_REQUESTS) return null;
       this.requests++;
-      return AIRTAG.Rpc.transaction(sig);
-    },
-
-    async _sigs(addr, limit) {
-      if (this.requests >= C.API.TRACE_MAX_REQUESTS) return null;
-      this.requests++;
-      return AIRTAG.Rpc.signaturesFor(addr, { limit });
+      return AIRTAG.Rpc.addressTxs(addr);
     },
 
     async start() {
       if (this.running) return;
       const target = this.classify(document.getElementById("trace-input").value);
       if (!target) {
-        this.log("!! unrecognized target — expected base58 address (32-44) or tx signature (~88)", "err");
+        this.log("!! unrecognized target — expected 0x address (40 hex) or tx hash (64 hex)", "err");
         return;
       }
       const depth = parseInt(document.getElementById("trace-depth").value, 10);
@@ -90,10 +89,19 @@
       this.logEl.innerHTML = "";
       this.hitsEl.innerHTML = "";
       this.setBadge("RESOLVING");
-      this.log(`>> target acquired [${target.kind}] ${target.value.slice(0, 20)}…`);
+      this.log(`>> target acquired [${target.kind}] ${target.value.slice(0, 18)}…`);
 
       try {
-        await this.walk(target, depth);
+        let rootAddr = target.value;
+        if (target.kind === "txhash") {
+          this.log(".. hydrating root transaction");
+          this.requests++;
+          const tx = await AIRTAG.Rpc.txDetail(target.value);
+          if (!tx || tx.notFound || !tx.from) throw new Error("transaction unreachable or unknown");
+          rootAddr = (tx.from.hash || "").toLowerCase();
+          this.log(`.. sender resolved ${short(rootAddr)} (${parseInt(tx.value || "0", 10) / 1e18} ETH moved)`, "ok");
+        }
+        await this.walk(rootAddr, depth);
       } catch (err) {
         this.log("!! trace aborted: " + err.message, "err");
         this.setBadge("FAULT");
@@ -102,111 +110,79 @@
       document.getElementById("trace-btn").disabled = false;
     },
 
-    /* Outgoing SOL transfers from `addr`, aggregated per
-     * destination, across up to `txCap` transactions confined to
-     * blockTime ≥ afterMs (temporal causality). */
-    async _outflows(addr, afterMs, txCap) {
-      const sigs = await this._sigs(addr, 12);
-      if (!sigs) return { flows: [], lastTime: 0 };
-      const eligible = sigs
-        .filter((s) => !s.err && s.blockTime && s.blockTime * 1000 >= afterMs - 60_000)
-        .sort((a, b) => a.blockTime - b.blockTime)   // earliest post-receipt first
-        .slice(0, txCap);
-      const perDest = new Map();
-      let lastTime = 0;
-      for (const s of eligible) {
-        const tx = await this._tx(s.signature);
-        if (!tx) continue;
-        for (const o of AIRTAG.Decode.outgoing(tx, addr)) {
-          const cur = perDest.get(o.to) || { sol: 0, sig: o.sig, time: o.time };
-          cur.sol += o.sol;
-          perDest.set(o.to, cur);
-          lastTime = Math.max(lastTime, o.time);
-        }
-      }
-      const flows = [...perDest.entries()]
-        .map(([to, v]) => ({ to, ...v }))
-        .sort((a, b) => b.sol - a.sol);
-      return { flows, lastTime };
-    },
-
-    async walk(target, maxDepth) {
+    async walk(rootAddr, maxDepth) {
       const nodes = [], edges = [], hits = [];
       const seen = new Set();
-      let rootAddr, rootLabel;
 
-      if (target.kind === "signature") {
-        this.log(".. hydrating root transaction");
-        const tx = await this._tx(target.value);
-        if (!tx) throw new Error("transaction unreachable or unknown");
-        /* primary debtor = account with the largest SOL debit */
-        const keys = (tx.transaction.message.accountKeys || []);
-        let best = -1, bestDebit = 0;
-        keys.forEach((k, i) => {
-          if (C.PROGRAM_IDS.has(k.pubkey)) return;
-          const d = (tx.meta.postBalances[i] || 0) - (tx.meta.preBalances[i] || 0);
-          if (d < bestDebit) { bestDebit = d; best = i; }
-        });
-        if (best < 0) throw new Error("no SOL debit found in transaction");
-        rootAddr = keys[best].pubkey;
-        this.log(`.. primary debtor ${short(rootAddr)} (−${fmtSol(-bestDebit / 1e9)} SOL)`, "ok");
-      } else {
-        rootAddr = target.value;
-      }
-      rootLabel = WATCH.has(rootAddr)
-        ? WATCH.get(rootAddr).entity + " (watched)" : short(rootAddr);
-
-      const root = { id: rootAddr, label: rootLabel, kind: "root", depth: 0, sol: 0 };
+      const rootWatch = watchLookup(rootAddr);
+      const root = {
+        id: rootAddr,
+        label: rootWatch ? rootWatch.entity + " (watched)" : short(rootAddr),
+        kind: "root", depth: 0, amt: 0,
+      };
       nodes.push(root);
       seen.add(rootAddr);
       this.setBadge("WALKING");
-      this.log(".. collecting recent outbound transfers (temporal window opens at receipt)");
+      this.log(".. collecting outbound native transfers (temporal window opens at receipt)");
 
-      /* frontier entries: {addr, node, afterMs, depth, inheritedSol} */
-      let frontier = [{ addr: rootAddr, node: root, afterMs: 0, depth: 0, inheritedSol: null }];
+      /* frontier entries: {addr, node, afterMs, depth, inheritedEth} */
+      let frontier = [{ addr: rootAddr, node: root, afterMs: 0, depth: 0, inheritedEth: null }];
 
       while (frontier.length && this.requests < C.API.TRACE_MAX_REQUESTS) {
         const next = [];
         for (const f of frontier) {
           if (f.depth >= maxDepth) continue;
-          const { flows } = await this._outflows(f.addr, f.afterMs, C.API.TRACE_TX_PER_HOP + (f.depth === 0 ? 2 : 0));
+          const items = await this._addressTxs(f.addr);
+          if (!items) { this.log(".. history unreachable for " + short(f.addr), "err"); continue; }
+          const outs = AIRTAG.Decode.outgoing(items, f.addr, f.afterMs)
+            .slice(0, C.API.TRACE_TX_PER_HOP * 3);
+
+          /* aggregate per destination */
+          const perDest = new Map();
+          for (const o of outs) {
+            const cur = perDest.get(o.to) || { eth: 0, hash: o.hash, time: o.time };
+            cur.eth += o.eth;
+            cur.time = Math.max(cur.time, o.time);
+            perDest.set(o.to, cur);
+          }
+          const flows = [...perDest.entries()]
+            .map(([to, v]) => ({ to, ...v }))
+            .sort((a, b) => b.eth - a.eth);
+
           if (!flows.length) {
-            if (f.depth === 0) this.log(".. no outbound SOL transfers found in window", "dim");
+            if (f.depth === 0) this.log(".. no outbound native transfers found in window", "dim");
             continue;
           }
-          const totalOut = flows.reduce((s, x) => s + x.sol, 0);
-          if (f.depth === 0) root.sol = totalOut;
+          const totalOut = flows.reduce((s, x) => s + x.eth, 0);
+          if (f.depth === 0) root.amt = totalOut;
 
           for (const flow of flows.slice(0, C.API.TRACE_MAX_FANOUT)) {
-            const w = WATCH.get(flow.to);
+            const w = watchLookup(flow.to);
             if (w) {
-              /* direct custodial endpoint */
               const id = flow.to + ":" + f.depth;
-              nodes.push({ id, label: w.entity, kind: "cex", depth: f.depth + 1, sol: flow.sol });
-              edges.push({ from: f.node.id, to: id, sol: flow.sol });
-              hits.push({ entity: w.entity, etype: w.type, sol: flow.sol, depth: f.depth + 1, tag: w.tag });
-              this.log(`## CUSTODIAL ENDPOINT — ${fmtSol(flow.sol)} SOL → ${w.entity} [${w.tag}] at hop ${f.depth + 1}`, "hit");
+              nodes.push({ id, label: w.entity, kind: "cex", depth: f.depth + 1, amt: flow.eth });
+              edges.push({ from: f.node.id, to: id, amt: flow.eth });
+              hits.push({ entity: w.entity, etype: w.type, amt: flow.eth, depth: f.depth + 1, tag: w.tag });
+              this.log(`## WATCHED ENDPOINT — ${fmtEth(flow.eth)} ETH → ${w.entity} [${w.tag}] at hop ${f.depth + 1}`, "hit");
 
-              /* D-01: if the forwarding node was an intermediate,
-               * register it as an inferred deposit address */
-              if (f.inheritedSol) {
-                const ratio = flow.sol / f.inheritedSol;
+              if (f.inheritedEth) {
+                const ratio = flow.eth / f.inheritedEth;
                 const dtSec = Math.max(0, (flow.time - f.afterMs) / 1000);
-                if (AIRTAG.Detect.DepositRegistry.note(f.addr, w.entity, ratio, dtSec, flow.sig)) {
+                if (AIRTAG.Detect.DepositRegistry.note(f.addr, w.entity, ratio, dtSec, flow.hash)) {
                   f.node.kind = "deposit";
                   f.node.label = short(f.addr) + " ⤳" + w.entity;
-                  this.log(`## D-01 INFERENCE — ${short(f.addr)} attributed as ${w.entity} deposit address (fwd ${(ratio * 100).toFixed(0)}% in ${Math.round(dtSec)}s)`, "hit");
+                  this.log(`## D-01 INFERENCE — ${short(f.addr)} attributed as ${w.entity} hot-path address (fwd ${(ratio * 100).toFixed(0)}% in ${Math.round(dtSec)}s)`, "hit");
                 }
               }
               continue;
             }
             if (seen.has(flow.to)) continue;
             seen.add(flow.to);
-            const node = { id: flow.to, label: short(flow.to), kind: "unknown", depth: f.depth + 1, sol: flow.sol };
+            const node = { id: flow.to, label: short(flow.to), kind: "unknown", depth: f.depth + 1, amt: flow.eth };
             nodes.push(node);
-            edges.push({ from: f.node.id, to: flow.to, sol: flow.sol });
-            this.log(`.. hop ${f.depth + 1}: ${fmtSol(flow.sol)} SOL → ${short(flow.to)}`);
-            next.push({ addr: flow.to, node, afterMs: flow.time || Date.now(), depth: f.depth + 1, inheritedSol: flow.sol });
+            edges.push({ from: f.node.id, to: flow.to, amt: flow.eth });
+            this.log(`.. hop ${f.depth + 1}: ${fmtEth(flow.eth)} ETH → ${short(flow.to)}`);
+            next.push({ addr: flow.to, node, afterMs: flow.time || Date.now(), depth: f.depth + 1, inheritedEth: flow.eth });
           }
           this.graph = { nodes, edges, hits };
           this.render();
@@ -216,11 +192,11 @@
 
       this.graph = { nodes, edges, hits };
       this.render();
-      this.renderHits(hits, root.sol);
-      this.log(`>> trace complete — ${nodes.length} nodes · ${edges.length} edges · ${hits.length} custodial hit(s) · ${this.requests}/${C.API.TRACE_MAX_REQUESTS} rpc calls`, "ok");
+      this.renderHits(hits, root.amt);
+      this.log(`>> trace complete — ${nodes.length} nodes · ${edges.length} edges · ${hits.length} watched hit(s) · ${this.requests}/${C.API.TRACE_MAX_REQUESTS} api calls`, "ok");
       this.setBadge(hits.length ? hits.length + " HIT(S)" : "CLEAN");
       if (!hits.length) {
-        this.log(".. no watchlisted endpoint reached in window — widen depth, or the funds are still at rest", "dim");
+        this.log(".. no watched endpoint reached in window — widen depth, or the funds are still at rest", "dim");
       }
     },
 
@@ -232,27 +208,27 @@
       this.log(">> DEMO MODE — synthetic graph, illustrative only", "dim");
       this.graph = AIRTAG.Detect.demoTrace(depth);
       this.render();
-      this.renderHits(this.graph.hits, this.graph.nodes[0].sol);
+      this.renderHits(this.graph.hits, this.graph.nodes[0].amt);
       for (const h of this.graph.hits) {
-        this.log(`## CUSTODIAL ENDPOINT — ${fmtSol(h.sol)} SOL → ${h.entity} at hop ${h.depth}`, "hit");
+        this.log(`## WATCHED ENDPOINT — ${fmtEth(h.amt)} ETH → ${h.entity} at hop ${h.depth}`, "hit");
       }
       this.setBadge("DEMO · " + this.graph.hits.length + " HIT(S)");
     },
 
-    renderHits(hits, rootSol) {
+    renderHits(hits, rootAmt) {
       if (!hits.length) {
-        this.hitsEl.innerHTML = '<div class="empty-note">no custodial endpoints in graph</div>';
+        this.hitsEl.innerHTML = '<div class="empty-note">no watched endpoints in graph</div>';
         return;
       }
       const byEntity = {};
       for (const h of hits) {
-        byEntity[h.entity] = byEntity[h.entity] || { sol: 0, etype: h.etype };
-        byEntity[h.entity].sol += h.sol;
+        byEntity[h.entity] = byEntity[h.entity] || { amt: 0, etype: h.etype };
+        byEntity[h.entity].amt += h.amt;
       }
       this.hitsEl.innerHTML = Object.entries(byEntity).map(([name, o]) => {
-        const pct = rootSol > 0 ? Math.min(100, o.sol / rootSol * 100).toFixed(1) : "—";
+        const pct = rootAmt > 0 ? Math.min(100, o.amt / rootAmt * 100).toFixed(1) : "—";
         return `<div class="hit-row"><span class="he">▲ ${name} <span style="opacity:.6">${o.etype}</span></span>` +
-               `<span class="hv">${fmtSol(o.sol)} SOL · ${pct}% exposure</span></div>`;
+               `<span class="hv">${fmtEth(o.amt)} ETH · ${pct}% exposure</span></div>`;
       }).join("");
     },
 
@@ -281,7 +257,7 @@
         });
       });
 
-      const maxSol = Math.max(1e-9, ...edges.map((e) => e.sol));
+      const maxAmt = Math.max(1e-9, ...edges.map((e) => e.amt));
       const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
 
       for (const e of edges) {
@@ -290,7 +266,7 @@
         ctx.strokeStyle = b.kind === "cex" ? "rgba(250,178,25,0.55)"
           : b.kind === "deposit" ? "rgba(25,158,112,0.5)"
           : "rgba(255,255,255,0.14)";
-        ctx.lineWidth = Math.max(1, (e.sol / maxSol) * 4);
+        ctx.lineWidth = Math.max(1, (e.amt / maxAmt) * 4);
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.bezierCurveTo(a.x + (b.x - a.x) * 0.5, a.y, a.x + (b.x - a.x) * 0.5, b.y, b.x, b.y);
@@ -322,9 +298,9 @@
         ctx.font = "9px " + col("--mono");
         ctx.textAlign = "center";
         ctx.fillText(n.label, n.x, n.y - r - 5);
-        if (n.kind !== "unknown" && n.sol > 0) {
+        if (n.kind !== "unknown" && n.amt > 0) {
           ctx.fillStyle = col("--ink-muted");
-          ctx.fillText(fmtSol(n.sol) + " SOL", n.x, n.y + r + 12);
+          ctx.fillText(fmtEth(n.amt) + " ETH", n.x, n.y + r + 12);
         }
       }
     },
