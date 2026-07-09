@@ -32,21 +32,22 @@ AIRTAG.CONFIG = {
     shard: "04/16",
   },
 
-  /* The $VEDANT token (Robinhood Chain, ERC-20). Telemetry comes
-   * from two live sources: the chain's Blockscout token API
-   * (deployment, holders, supply) and DexScreener (pool price /
-   * liquidity / volume once a pair is indexed). The panel walks
-   * PRE-DEPLOY → DEPLOYED·AWAITING LIQUIDITY → LIVE honestly. */
+  /* The $VEDANT token (Robinhood Chain, ERC-20).
+   *
+   * CA INTENTIONALLY UNSET — the contract address has been removed
+   * from the site and will be bound at launch. While `ca` is empty
+   * the token module sits in a STANDBY state (no address shown, no
+   * polling) and the mission-bar chip reads "CA PENDING".
+   *
+   * TO RE-ARM: set `ca` to the contract address below. The token
+   * module, mission-bar chip, explorer/dex links, and Blockscout +
+   * DexScreener telemetry all resume automatically — every URL is
+   * derived from `ca` at runtime, so this is the only edit needed. */
   TOKEN: {
     symbol: "VEDANT",
-    ca: "0xdb3995467291870629e6f8f838b8e901196eb4bb",
+    ca: "",
     chain: "robinhood-chain",
-    blockscoutToken: "https://robinhoodchain.blockscout.com/api/v2/tokens/0xdb3995467291870629e6f8f838b8e901196eb4bb",
-    dexscreenerPairs: "https://api.dexscreener.com/latest/dex/tokens/0xdb3995467291870629e6f8f838b8e901196eb4bb",
-    links: {
-      explorer: "https://robinhoodchain.blockscout.com/token/0xdb3995467291870629e6f8f838b8e901196eb4bb",
-      dexscreener: "https://dexscreener.com/search?q=0xdb3995467291870629e6f8f838b8e901196eb4bb",
-    },
+    explorerBase: "https://robinhoodchain.blockscout.com",
     pollMs: 30_000,
   },
 
@@ -150,7 +151,7 @@ AIRTAG.CONFIG = {
     "data plane: JSON-RPC (rpc.mainnet.chain.robinhood.com) + Blockscout REST · bucket 2.5 rps",
     "websocket lane: eth_subscribe newHeads · push-triggered feed sweeps",
     "rule engine R-07 armed: notional ≥ $250K · risk ≥ 85",
-    "$VEDANT token module: live DexScreener pool telemetry bound to CA FsTedV…cpump (solana)",
+    "$VEDANT token module: STANDBY — contract address not yet bound (pending launch)",
     "signal-scope: polar risk projection · entity azimuth × notional radius",
   ],
 };

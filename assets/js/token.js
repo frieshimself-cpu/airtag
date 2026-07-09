@@ -2,19 +2,31 @@
  * VEDANT // token.js
  * $VEDANT token module — Robinhood Chain ERC-20.
  *
- * Two live sources, three honest states:
+ * When CONFIG.TOKEN.ca is UNSET the module sits in STANDBY (no
+ * address shown, no network calls). When a CA is bound it walks
+ * three honest states:
  *   PRE-DEPLOY   — contract not found on-chain yet (Blockscout
  *                  404, no DEX pairs). Module armed, polling.
  *   DEPLOYED     — Blockscout returns token metadata (name,
- *                  symbol, holders, supply) but no DEX pool is
- *                  indexed yet → real on-chain stats shown.
+ *                  symbol, holders, supply) but no pool is indexed
+ *                  → real on-chain stats shown.
  *   LIVE         — DexScreener indexes a pair → price / mcap /
- *                  liquidity / 24h volume / buy-sell pressure
- *                  and a live-updating price trace.
+ *                  liquidity / 24h volume / buy-sell pressure and
+ *                  a live price trace.
+ *
+ * All endpoints are derived from `ca` at runtime, so re-arming is
+ * a single config edit.
  * ============================================================ */
 
 (function () {
   const T = AIRTAG.CONFIG.TOKEN;
+  const hasCA = () => !!(T.ca && T.ca.length);
+  const urls = () => ({
+    bs:       `${T.explorerBase}/api/v2/tokens/${T.ca}`,
+    dex:      `https://api.dexscreener.com/latest/dex/tokens/${T.ca}`,
+    explorer: `${T.explorerBase}/token/${T.ca}`,
+    dexUi:    `https://dexscreener.com/search?q=${T.ca}`,
+  });
 
   const fmt = (v) => {
     if (v == null || isNaN(v)) return "—";
@@ -47,6 +59,10 @@
     init() {
       this.el = {
         state: document.getElementById("tok-state"),
+        caCode: document.getElementById("tok-ca-code"),
+        copy: document.getElementById("tok-copy"),
+        linkEx: document.getElementById("tok-link-explorer"),
+        linkDex: document.getElementById("tok-link-dex"),
         price: document.getElementById("tok-price"),
         change: document.getElementById("tok-change"),
         l1: document.getElementById("tok-l1"), v1: document.getElementById("tok-mcap"),
@@ -58,17 +74,49 @@
         spark: document.getElementById("tok-spark"),
         pair: document.getElementById("tok-pair"),
       };
-      const copyBtn = document.getElementById("tok-copy");
-      if (copyBtn) copyBtn.addEventListener("click", () => this._copy(copyBtn));
+      if (this.el.copy) this.el.copy.addEventListener("click", () => this._copy(this.el.copy));
+
+      if (!hasCA()) { this._standby(); return; }
+
+      this.el.caCode.textContent = T.ca;
+      if (this.el.linkEx) this.el.linkEx.href = urls().explorer;
+      if (this.el.linkDex) this.el.linkDex.href = urls().dexUi;
       this.poll();
       setInterval(() => this.poll(), T.pollMs);
     },
 
     _copy(btn) {
+      if (!hasCA()) return;
       const done = () => { const o = btn.textContent; btn.textContent = "COPIED ✓"; setTimeout(() => (btn.textContent = o), 1400); };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(T.ca).then(done).catch(() => {});
       }
+    },
+
+    _setLabels(a, b, c) {
+      if (this.el.l1) this.el.l1.textContent = a;
+      if (this.el.l2) this.el.l2.textContent = b;
+      if (this.el.l3) this.el.l3.textContent = c;
+    },
+
+    _standby() {
+      const box = document.getElementById("panel-token");
+      if (box) box.classList.remove("token-live");
+      this.el.state.className = "tok-state pre";
+      this.el.state.textContent = "◍ STANDBY · NO CONTRACT BOUND";
+      if (this.el.caCode) this.el.caCode.textContent = "contract address pending";
+      if (this.el.copy) this.el.copy.hidden = true;
+      if (this.el.linkEx) this.el.linkEx.hidden = true;
+      if (this.el.linkDex) this.el.linkDex.hidden = true;
+      this.el.pair.textContent = "token module idle — CA will be bound at launch";
+      this._setLabels("MARKET CAP", "LIQUIDITY", "VOLUME 24H");
+      ["price", "v1", "v2", "v3", "change", "pressure"].forEach((k) => {
+        if (this.el[k]) this.el[k].textContent = "—";
+      });
+      this.el.change.className = "tok-change";
+      this.el.pbBuy.style.width = "50%";
+      this.el.pbSell.style.width = "50%";
+      this._drawSpark("price trace populates once a contract is bound");
     },
 
     async _fetchJson(url) {
@@ -84,10 +132,9 @@
     },
 
     async poll() {
-      const [dex, bs] = await Promise.all([
-        this._fetchJson(T.dexscreenerPairs),
-        this._fetchJson(T.blockscoutToken),
-      ]);
+      if (!hasCA()) return;
+      const u = urls();
+      const [dex, bs] = await Promise.all([this._fetchJson(u.dex), this._fetchJson(u.bs)]);
       const pairs = dex && Array.isArray(dex.pairs) ? dex.pairs : (Array.isArray(dex) ? dex : []);
       if (pairs && pairs.length) {
         pairs.sort((a, b) => ((b.liquidity && b.liquidity.usd) || 0) - ((a.liquidity && a.liquidity.usd) || 0));
@@ -97,12 +144,6 @@
       } else {
         this._preDeploy();
       }
-    },
-
-    _setLabels(a, b, c) {
-      if (this.el.l1) this.el.l1.textContent = a;
-      if (this.el.l2) this.el.l2.textContent = b;
-      if (this.el.l3) this.el.l3.textContent = c;
     },
 
     _preDeploy() {

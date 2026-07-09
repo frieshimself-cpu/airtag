@@ -90,7 +90,7 @@
     ["mod", "decoder            ", "native ETH-value + ERC-20 method decode lanes online"],
     ["mod", "detectors          ", "arming D-01 deposit-inference · D-02 burst · D-03 round · D-04 bridge"],
     ["warn","detectors          ", "H-17 cross-chain matcher in warm-up (model v9 @ 62%)"],
-    ["mod", "token-module       ", "binding $VEDANT ERC-20 0xdb39…b4bb → Blockscout + DexScreener"],
+    ["mod", "token-module       ", "$VEDANT module in STANDBY — no contract bound (pending launch)"],
     ["mod", "rules              ", "R-07 threshold engine armed ($250K / risk 85)"],
     ["mod", "sim-layer          ", "instant-swap intercept simulation online [SRC=HEUR]"],
     ["ok",  "vedant             ", "all subsystems nominal — entering live mode"],
@@ -475,13 +475,26 @@
     document.getElementById("alerts-ack").addEventListener("click", () => {
       State.alerts = []; renderAlerts();
     });
-    const mca = document.getElementById("mca-copy");
-    if (mca) mca.addEventListener("click", () => {
-      const t = C.TOKEN.ca;
-      const done = () => { mca.textContent = "COPIED ✓"; setTimeout(() => (mca.textContent = "COPY"), 1400); };
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done).catch(() => {});
-      else done();
-    });
+  }
+
+  /* mission-bar token identity — driven by CONFIG.TOKEN.ca so that
+   * re-arming the token is a single config edit (empty → CA PENDING) */
+  function renderTokenIdentity() {
+    const code = document.getElementById("mca-code");
+    const copy = document.getElementById("mca-copy");
+    if (C.TOKEN.ca) {
+      if (code) code.textContent = C.TOKEN.ca;
+      if (copy) {
+        copy.hidden = false;
+        copy.onclick = () => {
+          const done = () => { copy.textContent = "COPIED ✓"; setTimeout(() => (copy.textContent = "COPY"), 1400); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(C.TOKEN.ca).then(done).catch(() => {});
+        };
+      }
+    } else {
+      if (code) code.textContent = "CA PENDING";
+      if (copy) copy.hidden = true;
+    }
   }
 
   /* ---------- init ---------- */
@@ -497,6 +510,7 @@
     AIRTAG.Token.init();
     AIRTAG.Trace.init();
     wireControls();
+    renderTokenIdentity();
     renderDetectors();
     buildTicker();
     startClock();

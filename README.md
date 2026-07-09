@@ -9,15 +9,16 @@ ArbSys L2→L1 bridge exit), tracked whales, and instant-swap services on
 
 ## $VEDANT token
 
-The console carries a live token module bound to the project's contract
-address (an ERC-20 native to Robinhood Chain):
+The console carries a token module (`MOD·00`) for the project's ERC-20 on
+Robinhood Chain. **The contract address is currently unset** — it has been
+removed from the site pending launch, so the module sits in a **STANDBY** state
+(no address shown, no network calls) and the mission-bar chip reads
+`CA PENDING`.
 
-```
-CA: 0xdb3995467291870629e6f8f838b8e901196eb4bb   ($VEDANT · Robinhood Chain)
-```
-
-The `MOD·00` panel polls two live sources every 30 s and walks three honest
-states:
+**To re-arm:** set `ca` in `CONFIG.TOKEN` (`assets/js/config.js`) to the
+contract address. Every endpoint and link is derived from `ca` at runtime, so
+that single edit brings the whole module back online. Once bound, the panel
+polls two live sources every 30 s and walks three honest states:
 
 - **PRE-DEPLOY** — the contract is not found on-chain yet (Blockscout 404, no
   DEX pair). Module armed, polling.
@@ -25,8 +26,6 @@ states:
   total supply / decimals** are shown while market data is still pending.
 - **LIVE** — DexScreener indexes a pair → **price / 24h change / market cap /
   liquidity / 24h volume / buy-sell pressure** and a live price trace.
-
-The CA is one-click copyable from the mission bar.
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
