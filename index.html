@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VEDANT — Robinhood Chain Exchange-Flow Intelligence Terminal</title>
-<meta name="description" content="VEDANT // Verifiable Exchange-flow Detection, Attribution & Network Tracing. Real-time detection of funds moving through venues and instant-swap exchanges on Robinhood Chain.">
+<title>VEDANT — Solana Exchange-Flow Intelligence Terminal</title>
+<meta name="description" content="VEDANT // Verifiable Exchange-flow Detection, Attribution & Network Tracing. Real-time detection of funds moving through centralized and instant-swap exchanges on Solana.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%233987e5' stroke-width='8'/><circle cx='50' cy='50' r='12' fill='%233987e5'/></svg>">
 <link rel="stylesheet" href="assets/css/main.css">
 </head>
@@ -23,7 +23,7 @@
     ▒██ █░░ ▒▓█  ▄ ░▓█▄   ▌░██▄▄▄▄██ ▓██▒  ▐▌██▒░ ▓██▓ ░
      ▒▀█░   ░▒████▒░▒████▓  ▓█   ▓██▒▒██░   ▓██░  ▒██▒ ░
      ░ ▐░   ░░ ▒░ ░ ▒▒▓  ▒  ▒▒   ▓▒█░░ ▒░   ▒ ▒   ▒ ░░</pre>
-    <div class="boot-sub">VERIFIABLE EXCHANGE-FLOW DETECTION · ATTRIBUTION &amp; NETWORK TRACING — ROBINHOOD CHAIN · ID 4663</div>
+    <div class="boot-sub">VERIFIABLE EXCHANGE-FLOW DETECTION · ATTRIBUTION &amp; NETWORK TRACING — SOLANA MAINNET</div>
     <div id="boot-log" class="boot-log"></div>
   </div>
 </div>
@@ -42,23 +42,22 @@
     </svg>
     <div class="brand-text">
       <span class="brand-name">VEDANT</span>
-      <span class="brand-ver">v7.0.0 · build a3f92e1</span>
+      <span class="brand-ver">v6.1.0 · build e7d41c9</span>
     </div>
     <span class="env-badge">PROD</span>
-    <span class="env-badge dim">CLUSTER robinhood-mainnet · CHAIN-ID 4663 · SHARD 04/16</span>
+    <span class="env-badge dim">CLUSTER solana-mainnet · SHARD 04/16</span>
   </div>
 
   <div class="topbar-metrics">
-    <div class="tmetric"><span class="tm-label">ETH/USD</span><span class="tm-value" id="tm-price">——</span><span class="tm-delta" id="tm-price-delta"></span></div>
-    <div class="tmetric"><span class="tm-label">BLOCK</span><span class="tm-value" id="tm-slot">——</span></div>
-    <div class="tmetric"><span class="tm-label">GAS (gwei)</span><span class="tm-value" id="tm-gas">——</span></div>
+    <div class="tmetric"><span class="tm-label">SOL/USD</span><span class="tm-value" id="tm-price">——</span><span class="tm-delta" id="tm-price-delta"></span></div>
+    <div class="tmetric"><span class="tm-label">SLOT</span><span class="tm-value" id="tm-slot">——</span></div>
     <div class="tmetric">
-      <span class="tm-label">NET UTIL · <span id="tm-util-pct">—</span></span>
-      <span class="tm-bar"><span class="tm-bar-fill" id="tm-util-bar"></span></span>
+      <span class="tm-label">EPOCH <span id="tm-epoch">—</span> · <span id="tm-epoch-pct">—</span></span>
+      <span class="tm-bar"><span class="tm-bar-fill" id="tm-epoch-bar"></span></span>
     </div>
-    <div class="tmetric"><span class="tm-label">24H TX</span><span class="tm-value" id="tm-tps">——</span></div>
+    <div class="tmetric"><span class="tm-label">NETWORK TPS</span><span class="tm-value" id="tm-tps">——</span></div>
     <div class="tmetric"><span class="tm-label">RPC LAT</span><span class="tm-value" id="tm-latency">——</span></div>
-    <div class="tmetric"><span class="tm-label">API CALLS</span><span class="tm-value" id="tm-calls">0</span></div>
+    <div class="tmetric"><span class="tm-label">RPC CALLS</span><span class="tm-value" id="tm-calls">0</span></div>
     <div class="tmetric wide">
       <span class="tm-label">DATA PLANE</span>
       <span class="tm-value"><span class="status-dot" id="link-dot"></span><span id="link-state">SYNCING</span></span>
@@ -87,19 +86,19 @@
 <!-- ============ STAT TILES ============ -->
 <section class="stat-row">
   <div class="stat-tile hud">
-    <div class="st-label">NET VENUE FLOW · 24H</div>
+    <div class="st-label">NET CEX FLOW · 24H</div>
     <div class="st-value" id="st-netflow">—</div>
-    <div class="st-foot" id="st-netflow-foot">aggregated across venues + tracked whales</div>
+    <div class="st-foot" id="st-netflow-foot">aggregated across 12 chain-watched wallets</div>
   </div>
   <div class="stat-tile hud">
-    <div class="st-label">VENUE INFLOW · 24H</div>
+    <div class="st-label">EXCHANGE INFLOW · 24H</div>
     <div class="st-value in" id="st-inflow">—</div>
-    <div class="st-foot">into venues · native ETH notional</div>
+    <div class="st-foot">deposits → custodial · SOL + USDC/USDT</div>
   </div>
   <div class="stat-tile hud">
-    <div class="st-label">VENUE OUTFLOW · 24H</div>
+    <div class="st-label">EXCHANGE OUTFLOW · 24H</div>
     <div class="st-value out" id="st-outflow">—</div>
-    <div class="st-foot">out of venues ← native ETH</div>
+    <div class="st-foot">withdrawals ← custodial wallets</div>
   </div>
   <div class="stat-tile hud">
     <div class="st-label">DEPOSIT ADDRS INFERRED</div>
@@ -109,7 +108,7 @@
   <div class="stat-tile hud">
     <div class="st-label">BRIDGE-EXPOSED · D-04</div>
     <div class="st-value" id="st-bridge">0</div>
-    <div class="st-foot">ArbSys exit · L1 bridge machinery</div>
+    <div class="st-foot">wormhole · debridge · allbridge</div>
   </div>
   <div class="stat-tile hud">
     <div class="st-label">ACTIVE ALERTS</div>
@@ -124,7 +123,7 @@
   <!-- NETFLOW CHART -->
   <section class="panel hud" id="panel-netflow" data-mod="MOD·02">
     <header class="panel-head">
-      <h2>VENUE NETFLOW <span class="ph-sub">hourly · rolling 24h · USD notional</span></h2>
+      <h2>EXCHANGE NETFLOW <span class="ph-sub">hourly · rolling 24h · USD notional</span></h2>
       <div class="panel-tools">
         <span class="legend-item"><i class="swatch sw-in"></i>inflow</span>
         <span class="legend-item"><i class="swatch sw-out"></i>outflow</span>
@@ -142,7 +141,7 @@
     </header>
     <div class="trace-controls">
       <input id="trace-input" type="text" spellcheck="false" autocomplete="off"
-             placeholder="0x address or tx hash — follow funds to watched venue endpoints">
+             placeholder="solana address or tx signature — follow funds to custodial endpoints">
       <select id="trace-depth" title="max hop depth">
         <option value="2">DEPTH 2</option>
         <option value="3" selected>DEPTH 3</option>
@@ -185,8 +184,8 @@
       <table class="feed-table">
         <thead>
           <tr>
-            <th>TIME (UTC)</th><th>TX HASH</th><th>ENTITY</th><th>DIR</th>
-            <th>ASSET/METHOD</th><th class="num">AMOUNT</th><th class="num">USD</th>
+            <th>TIME (UTC)</th><th>SIGNATURE</th><th>ENTITY</th><th>DIR</th>
+            <th>ASSET</th><th class="num">AMOUNT</th><th class="num">USD</th>
             <th>COUNTERPARTY</th><th>RISK</th><th>SRC</th>
           </tr>
         </thead>
@@ -230,9 +229,9 @@
         </div>
         <canvas id="tok-spark" class="tok-spark"></canvas>
         <div class="tok-stats">
-          <div class="tok-stat"><span class="ts-l" id="tok-l1">MARKET CAP</span><span class="ts-v" id="tok-mcap">—</span></div>
-          <div class="tok-stat"><span class="ts-l" id="tok-l2">LIQUIDITY</span><span class="ts-v" id="tok-liq">—</span></div>
-          <div class="tok-stat"><span class="ts-l" id="tok-l3">VOLUME 24H</span><span class="ts-v" id="tok-vol">—</span></div>
+          <div class="tok-stat"><span class="ts-l">MARKET CAP</span><span class="ts-v" id="tok-mcap">—</span></div>
+          <div class="tok-stat"><span class="ts-l">LIQUIDITY</span><span class="ts-v" id="tok-liq">—</span></div>
+          <div class="tok-stat"><span class="ts-l">VOLUME 24H</span><span class="ts-v" id="tok-vol">—</span></div>
         </div>
         <div class="tok-pressure-row">
           <div class="tok-pb"><span class="tok-pb-buy" id="tok-pb-buy" style="width:50%"></span><span class="tok-pb-sell" id="tok-pb-sell" style="width:50%"></span></div>
@@ -241,8 +240,9 @@
         <div class="tok-foot">
           <span class="tok-pair" id="tok-pair">token module idle — CA will be bound at launch</span>
           <span class="tok-links">
-            <a id="tok-link-explorer" href="#" target="_blank" rel="noopener">explorer</a>
+            <a id="tok-link-pump" href="#" target="_blank" rel="noopener">pump</a>
             <a id="tok-link-dex" href="#" target="_blank" rel="noopener">dex</a>
+            <a id="tok-link-solscan" href="#" target="_blank" rel="noopener">solscan</a>
           </span>
         </div>
       </div>

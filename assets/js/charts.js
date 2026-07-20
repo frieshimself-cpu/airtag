@@ -190,11 +190,11 @@
     },
   };
 
-  /* ---------------- THROUGHPUT (real daily tx counts) ---------------- */
+  /* ---------------- THROUGHPUT (real TPS) ---------------- */
 
   const Throughput = {
     canvas: null, tip: null,
-    points: [],       // [{t, tps}] oldest→newest (tps = tx count that day)
+    points: [],       // [{t, tps}] oldest→newest
     _hoverIdx: -1,
 
     init() {
@@ -205,17 +205,19 @@
       window.addEventListener("resize", () => this.draw());
     },
 
-    /* Blockscout chart_data arrives newest-first: [{date, transactions_count}] */
-    setDaily(chartData) {
-      this.points = chartData
-        .filter((d) => d.transactions_count != null)
-        .map((d) => ({ t: Date.parse(d.date), tps: d.transactions_count }))
+    /* samples arrive newest-first, one per samplePeriodSecs */
+    setSamples(samples) {
+      const now = Date.now();
+      this.points = samples
+        .map((s, i) => ({
+          t: now - i * (s.samplePeriodSecs || 60) * 1000,
+          tps: s.numTransactions / (s.samplePeriodSecs || 60),
+        }))
         .reverse();
       this.draw();
       const label = document.getElementById("tps-now");
       if (label && this.points.length) {
-        const last = this.points[this.points.length - 1].tps;
-        label.textContent = (last >= 1e6 ? (last / 1e6).toFixed(2) + "M" : (last / 1e3).toFixed(0) + "K") + " tx/d";
+        label.textContent = Math.round(this.points[this.points.length - 1].tps).toLocaleString("en-US") + " tps";
       }
     },
 
@@ -254,8 +256,7 @@
         const y = padT + plotH * (1 - f);
         ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
         ctx.textAlign = "right";
-        const v = minT + (maxT - minT) * f;
-        ctx.fillText(v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : (v / 1e3).toFixed(0) + "k", padL - 5, y + 3);
+        ctx.fillText(((minT + (maxT - minT) * f) / 1000).toFixed(1) + "k", padL - 5, y + 3);
       });
 
       /* area fill + line */
@@ -292,8 +293,8 @@
         this.draw();
         const p = this.points[idx];
         const d = new Date(p.t);
-        const MON = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-        this.tip.innerHTML = `<b>${MON[d.getUTCMonth()]}-${String(d.getUTCDate()).padStart(2, "0")}</b><br>transactions <b>${Math.round(p.tps).toLocaleString("en-US")}</b>`;
+        const hh = String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0");
+        this.tip.innerHTML = `<b>${hh} UTC</b><br>throughput <b>${Math.round(p.tps).toLocaleString("en-US")} tps</b>`;
         this.tip.hidden = false;
       }
       const wrap = this.canvas.parentElement.getBoundingClientRect();

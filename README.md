@@ -1,31 +1,26 @@
 # VEDANT
 
-**V**erifiable **E**xchange-flow **D**etection, **A**ttribution & **N**etwork **T**racing — Robinhood Chain edition
+**V**erifiable **E**xchange-flow **D**etection, **A**ttribution & **N**etwork **T**racing — Solana edition
 
 A dark-terminal HUD console for detecting and tracing funds moving through
-on-chain venues (WETH vault, PoolManager DEX, the Robinhood router, and the
-ArbSys L2→L1 bridge exit), tracked whales, and instant-swap services on
-**Robinhood Chain** — an EVM L2 (Arbitrum Orbit), chain-id **4663** ("HOOD").
+centralized exchanges (Binance, Coinbase, Bybit, OKX, KuCoin, Gate.io, MEXC,
+Crypto.com, Bitget, Kraken) and instant-swap services on Solana mainnet.
 
 ## $VEDANT token
 
-The console carries a token module (`MOD·00`) for the project's ERC-20 on
-Robinhood Chain. **The contract address is currently unset** — it has been
-removed from the site pending launch, so the module sits in a **STANDBY** state
-(no address shown, no network calls) and the mission-bar chip reads
+The console carries a token module (`MOD·00`) for the project's Solana /
+pump.fun token. **The contract address is currently unset** — it has been
+removed from the site pending launch, so the module sits in a **STANDBY**
+state (no address shown, no network calls) and the mission-bar chip reads
 `CA PENDING`.
 
-**To re-arm:** set `ca` in `CONFIG.TOKEN` (`assets/js/config.js`) to the
-contract address. Every endpoint and link is derived from `ca` at runtime, so
-that single edit brings the whole module back online. Once bound, the panel
-polls two live sources every 30 s and walks three honest states:
-
-- **PRE-DEPLOY** — the contract is not found on-chain yet (Blockscout 404, no
-  DEX pair). Module armed, polling.
-- **DEPLOYED** — Blockscout returns token metadata → real on-chain **holders /
-  total supply / decimals** are shown while market data is still pending.
-- **LIVE** — DexScreener indexes a pair → **price / 24h change / market cap /
-  liquidity / 24h volume / buy-sell pressure** and a live price trace.
+**To re-arm:** set `ca` in `CONFIG.TOKEN` (`assets/js/config.js`) to the Solana
+mint. Every endpoint and link (DexScreener, pump.fun, Solscan) is derived from
+`ca` at runtime, so that single edit brings the whole module back online. Once
+bound, the panel polls DexScreener every 30 s: while no pool is indexed it
+shows an honest `PRE-LAUNCH · AWAITING LIQUIDITY POOL` state, and the moment a
+pair is indexed it renders live price, 24h change, market cap, liquidity, 24h
+volume, buy/sell pressure and a price trace.
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
@@ -33,23 +28,23 @@ polls two live sources every 30 s and walks three honest states:
 │                                                                    │
 │  ┌───────────────────────────────┐  ┌───────────────────────────┐  │
 │  │ rpc.js — data plane           │  │ detect.js                 │  │
-│  │  · EVM JSON-RPC (eth_*)       │  │  D-01 deposit-addr infer  │  │
-│  │  · Blockscout REST v2         │  │  D-02 burst detector      │  │
-│  │  · token-bucket rate limiter  │  │  D-03 round-notional      │  │
-│  │  · ws lane: eth_subscribe     │  │  D-04 ArbSys/bridge exit  │  │
-│  │    newHeads → feed sweeps     │  │  + swap-sim layer [HEUR]  │  │
+│  │  · JSON-RPC failover chain    │  │  D-01 deposit-addr infer  │  │
+│  │  · token-bucket rate limiter  │  │  D-02 burst detector      │  │
+│  │  · websocket lane:            │  │  D-03 round-notional      │  │
+│  │    slotSubscribe +            │  │  D-04 bridge exposure     │  │
+│  │    logsSubscribe(mentions)    │  │  + swap-sim layer [HEUR]  │  │
 │  └──────────────┬────────────────┘  └─────────────┬─────────────┘  │
 │  ┌──────────────┴────────────────┐  ┌─────────────┴─────────────┐  │
 │  │ decode.js — tx normalization  │  │ trace.js — temporal taint │  │
-│  │  native ETH value ·           │  │  walk (causality-window   │  │
-│  │  ERC-20 method decode ·       │  │  BFS over account graph)  │  │
-│  │  counterparty + bridge flag   │  │                           │  │
+│  │  SOL balance deltas ·         │  │  walk (causality-window   │  │
+│  │  USDC/USDT token deltas ·     │  │  BFS over account graph)  │  │
+│  │  counterparty extraction      │  │                           │  │
 │  └──────────────┬────────────────┘  └─────────────┬─────────────┘  │
 │                 └───────── unified event feed ────┘                │
-│      netflow · tx/day chart · topology · scope · heatmap · alerts   │
+│      netflow chart · TPS chart · topology · alerts · exposure      │
 └────────────────────────────────────────────────────────────────────┘
        │ HTTPS + WSS (public, keyless)
-   Robinhood Chain JSON-RPC + Blockscout REST · DexScreener
+   solana JSON-RPC (publicnode → mainnet-beta failover) · CoinGecko
 ```
 
 ## What is real vs. simulated
@@ -58,43 +53,38 @@ Every feed row carries a `SRC` tag:
 
 | SRC | Meaning |
 |---|---|
-| `WS` | Surfaced by a feed sweep **triggered** by an `eth_subscribe("newHeads")` push, then decoded from the Blockscout tx object. Chain-attested; hash links to the explorer. |
-| `RPC` | Found by a timed Blockscout sweep or per-venue history scan, decoded the same way. Chain-attested. |
+| `WS` | Pushed live by `logsSubscribe` on a priority-1 custodial wallet, then hydrated with `getTransaction` and decoded. Chain-attested; signature links to Solscan. |
+| `RPC` | Found by the polling rotation (`getSignaturesForAddress` with per-wallet cursors), hydrated and decoded the same way. Chain-attested. |
 | `HEUR` | Output of the simulation layer. Instant-swap services rotate per-order deposit addresses and publish no wallet set, so their rows are statistically plausible synthetic intercepts — illustrative, not chain-attested. |
 
 **Real subsystems:**
 
-- **Data plane** (`rpc.js`) — EVM JSON-RPC against
-  `rpc.mainnet.chain.robinhood.com` (`eth_blockNumber`, `eth_gasPrice`,
-  `eth_subscribe`) plus the chain's **Blockscout REST v2** API for rich data
-  (stats, latest txs, per-address histories, top accounts, daily tx charts).
-  A single global token bucket (2.5 rps) is shared by both lanes. The
-  WebSocket lane subscribes to `newHeads` for a live block counter and to
-  trigger feed sweeps. Plane state is honest: `WS-LIVE` → `RPC-POLL` →
-  `REPLAY (synthetic)`.
-- **Transaction decoding** (`decode.js`) — native ETH value (wei → ETH) with
-  live USD conversion, direction relative to the watch registry, counterparty
-  extraction, ERC-20 method surfacing, and bridge-touch tagging (the ArbSys
-  exit precompile `0x…0064` and L1-deposit machinery).
-- **Whale discovery** — at boot (and every 2 min) the top-balance EOAs are
-  resolved live from Blockscout's top-accounts API and folded into the watch
-  registry as `WHALE-01…05`.
-- **Trace console** (`trace.js`) — a *temporal* taint walk over the account
-  graph: from a root `0x` address (or a tx hash's sender), collect outgoing
-  native transfers, then examine each counterparty's history **after** the
-  funds arrived and follow them, depth-limited and request-budgeted. Hops
-  landing on a watched venue/whale are hits.
+- **Data plane** (`rpc.js`) — JSON-RPC with endpoint failover (publicnode →
+  mainnet-beta), a global token bucket (2.5 rps) shared by every consumer,
+  429/5xx cool-down rotation, and a WebSocket lane (`slotSubscribe` for the
+  live slot counter, `logsSubscribe` with `mentions` filters for push
+  detection on hot wallets) with auto-reconnect. Plane state is honest:
+  `WS-LIVE` → `RPC-POLL` → `REPLAY (synthetic)`.
+- **Transaction decoding** (`decode.js`) — native SOL deltas from
+  `pre/postBalances` (fee-corrected for the fee payer), USDC/USDT deltas from
+  `pre/postTokenBalances` matched by owner, dominant-leg selection,
+  counterparty extraction (largest opposite-sign delta, program accounts
+  excluded), and bridge-program tagging (Wormhole, deBridge, Allbridge).
+- **Trace console** (`trace.js`) — account-model chains have no UTXO graph,
+  so the walk is *temporal*: from a root address (or a signature's primary
+  debtor), collect outgoing SOL transfers, then examine each counterparty's
+  transactions **after** the funds arrived and follow them, depth-limited and
+  request-budgeted. Hops landing on watchlisted wallets are custodial hits.
 - **Detector D-01** — an intermediate that forwards ≥85% of received value
-  into a watched venue within 2h is attributed as a hot-path/deposit address
-  and registered (visible in the D-01 registry panel).
+  into a labeled hot wallet within 2h is attributed as that exchange's
+  deposit address and registered (visible in the D-01 registry panel).
 - **Detectors D-02/03/04** — burst detection (≥3 arrivals per entity in 90s),
-  round-ETH-notional signatures, and ArbSys/bridge-exit exposure. All feed the
-  composite risk score applied to real and simulated events alike.
-- **Network telemetry** — ETH price, gas, and network utilization from
-  Blockscout stats; live block height from JSON-RPC; the throughput panel from
-  Blockscout's daily transaction chart.
+  round-notional signatures, bridge exposure. All feed the composite risk
+  score applied to real and simulated events alike.
+- **Network telemetry** — SOL price (CoinGecko), epoch progress, live slot,
+  and the throughput panel built from `getRecentPerformanceSamples`.
 - **Live systems strip** — the eight HUD gauges are wired to real runtime
-  internals: the RPC token-bucket level, ingest-queue depth, WebSocket
+  internals: the RPC token-bucket level, ingest-queue depth, active WebSocket
   subscription count, event-store size, event throughput/min, cumulative
   detector hits, active endpoint + latency, and a monotonic vector clock.
 - **Signal-scope** (`scope.js`) — a rotating polar projection of the live
@@ -104,9 +94,9 @@ Every feed row carries a `SRC` tag:
 - **Threat index** — a composite of recent risk, active alerts, whale and
   bridge presence, driving the mission-bar meter (NOMINAL → CRITICAL).
 
-The venue registry consists of on-chain system/venue contracts visible on the
-chain's Blockscout explorer; whale labels are derived from live balances.
-Labels are heuristic and can go stale — disclosed as such.
+The watchlist consists of publicly documented exchange wallets (labels from
+Solscan/SolanaFM and public incident reports); labels can go stale and are
+disclosed as such.
 
 ## Running
 
@@ -121,7 +111,7 @@ python3 -m http.server 8080
 ## Deploying to Vercel
 
 The repo ships a `vercel.json` (static output, hardened headers, a CSP scoped
-to the Robinhood Chain RPC/Blockscout/DexScreener origins incl. WebSocket, cache rules for
+to the upstream RPC/price APIs incl. WebSocket origins, cache rules for
 `assets/`). No framework, no build command, no environment variables.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ffrieshimself-cpu%2Fairtag)
@@ -141,15 +131,15 @@ npx vercel --prod   # production deployment
 
 - `index.html` — single-page shell
 - `assets/css/main.css` — HUD terminal theme (series palette CVD-validated against the dark surface)
-- `assets/js/config.js` — brand, token, chain/RPC topology, venue watchlist, entity registry, detector parameters
-- `assets/js/rpc.js` — rate-limited EVM JSON-RPC + Blockscout REST client + websocket lane
-- `assets/js/decode.js` — Blockscout tx → normalized flow event
+- `assets/js/config.js` — brand, token, RPC topology, watchlist, entity registry, detector parameters
+- `assets/js/rpc.js` — rate-limited JSON-RPC client + websocket lane
+- `assets/js/decode.js` — transaction → normalized flow event
 - `assets/js/detect.js` — detectors D-01…D-04, risk model, simulation layer
-- `assets/js/charts.js` — netflow + tx/day throughput canvases, exposure bars
+- `assets/js/charts.js` — netflow + throughput canvases, exposure bars
 - `assets/js/heatmap.js` — entity × hour activity matrix
 - `assets/js/scope.js` — signal-scope polar projection
 - `assets/js/topology.js` — animated routing-graph canvas
-- `assets/js/token.js` — $VEDANT token module (Blockscout + DexScreener)
+- `assets/js/token.js` — $VEDANT DexScreener token module
 - `assets/js/fx.js` — background lattice, live systems strip, threat meter
 - `assets/js/trace.js` — temporal taint-trace engine + graph renderer
 - `assets/js/app.js` — orchestrator (boot, pollers, ws wiring, feed, alerts, scope, threat)

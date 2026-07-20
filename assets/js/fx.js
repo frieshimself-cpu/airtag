@@ -98,7 +98,7 @@
     tick() {
       const R = AIRTAG.Rpc, M = AIRTAG.Metrics || {};
       const bucket = R ? R.bucketLevel() : 0;
-      this._set("rpc-bucket", (bucket * (AIRTAG.CONFIG.CHAIN.BUCKET_CAPACITY)).toFixed(1) + " tok", bucket * 100, bucket < 0.2 ? "warn" : "");
+      this._set("rpc-bucket", (bucket * (AIRTAG.CONFIG.RPC.BUCKET_CAPACITY)).toFixed(1) + " tok", bucket * 100, bucket < 0.2 ? "warn" : "");
       const q = M.queueDepth || 0;
       this._set("ingest-q", q + " tx", Math.min(100, q / 24 * 100), q > 16 ? "warn" : "");
       const subs = R ? R.wsSubCount() : 0;
